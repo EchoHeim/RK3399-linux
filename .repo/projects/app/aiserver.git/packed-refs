@@ -1,9 +1,0 @@
-# pack-refs with: peeled fully-peeled sorted 
-6be66a965be923fb422e60e9089cd22f5f600ca0 refs/tags/linux-4.19-gen-rkr1
-^c37285aed29c0689d32e3b3e8ca9e46bb6890dba
-baa6ed39875963aa44b7bd5448b256464bb3ce78 refs/tags/linux-4.19-gen-rkr2
-^01ee68447028cc663d891c82361cac1d93620500
-cdd5130fd9f5137452e01c3570228a5846686bf2 refs/tags/linux-4.19-gen-rkr3
-^e26cc4821ff025a0fc6a8ddd9b69e421d34bc2c4
-870025bcc2c22ee56c2096375ab83a5d911271b2 refs/tags/linux-4.4-gen-rkr1
-^e26cc4821ff025a0fc6a8ddd9b69e421d34bc2c4

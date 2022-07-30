@@ -1,8 +1,0 @@
-b87dcde448624b73d95c1c3811fa7bb0435b42e0		tag 'linux-4.4-gen-rkr1' of ssh://www.rockchip.com.cn/linux/android/rk/platform/system/rk_tee_user
-ad4b3963e20554d4fe11d2289b54bf60183deff8		tag 'linux-4.19-gen-rkr1' of ssh://www.rockchip.com.cn/linux/android/rk/platform/system/rk_tee_user
-dba7df5cf5e99740cebc4d808a3650b543a0b026		tag 'linux-4.19-gen-rkr2' of ssh://www.rockchip.com.cn/linux/android/rk/platform/system/rk_tee_user
-ecb6b174762973434b5dee610917e53dc21bde7e		tag 'linux-4.19-gen-rkr3' of ssh://www.rockchip.com.cn/linux/android/rk/platform/system/rk_tee_user
-9eac6c1a827a539b3640c992e2da4b59b8fce8e4		tag 'linux-5.10-gen-rkr1' of ssh://www.rockchip.com.cn/linux/android/rk/platform/system/rk_tee_user
-b563bbf5c8a434a2bf050b599f6fb347c2ee95c6		tag 'linux-5.10-gen-rkr2' of ssh://www.rockchip.com.cn/linux/android/rk/platform/system/rk_tee_user
-1c630fa343d9ca376d320bbc8d83032c45a7ac53		tag 'linux-5.10-gen-rkr3' of ssh://www.rockchip.com.cn/linux/android/rk/platform/system/rk_tee_user
-88e0323bc481aa352bd8287bf086a2fc3f86a177		tag 'linux-5.10-gen-rkr3.1' of ssh://www.rockchip.com.cn/linux/android/rk/platform/system/rk_tee_user

@@ -1,1 +1,0 @@
-0000000000000000000000000000000000000000 b64b0a213240375e697185de06c3f502c65cdee7 Caesar Wang <wxt@rock-chips.com> 1656086958 +0800	fetch --progress --depth=1 rk --no-tags +refs/heads/honister/meta-qt5:refs/remotes/rk/honister/meta-qt5: storing head
