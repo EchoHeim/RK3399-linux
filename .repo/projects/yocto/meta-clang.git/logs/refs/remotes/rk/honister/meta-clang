@@ -1,0 +1,1 @@
+0000000000000000000000000000000000000000 088904d40231d9e099c2f5039cd3c2bc47d332d1 Caesar Wang <wxt@rock-chips.com> 1656086954 +0800	fetch --progress --depth=1 rk --no-tags +refs/heads/honister/meta-clang:refs/remotes/rk/honister/meta-clang: storing head

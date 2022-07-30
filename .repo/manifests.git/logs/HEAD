@@ -1,0 +1,4 @@
+b270163b800d5038f826f597176ad7a3a4e744e9 34a6fb9b506eba623529fa512ca73389cc47ac78 Caesar Wang <wxt@rock-chips.com> 1656086831 +0800	checkout: moving from default to 34a6fb9b506eba623529fa512ca73389cc47ac78
+34a6fb9b506eba623529fa512ca73389cc47ac78 30b4c316e6abfda5b40c82be32ea26dedd0e878b Caesar Wang <wxt@rock-chips.com> 1656121510 +0800	commit (amend): rk3399: update rk3399_linux_release to v2.9.0
+30b4c316e6abfda5b40c82be32ea26dedd0e878b 972c5fc7b4b038fd6884fc4b7d8fc60cace9f02b Caesar Wang <wxt@rock-chips.com> 1656301376 +0800	merge 972c5fc7b4b038fd6884fc4b7d8fc60cace9f02b: Fast-forward
+972c5fc7b4b038fd6884fc4b7d8fc60cace9f02b f8bbcb59360018d229c14369a3e4186409ae550b pi <pi@raspberrypi.(none)> 1659142901 +0100	merge f8bbcb59360018d229c14369a3e4186409ae550b: Fast-forward

@@ -1,0 +1,5 @@
+5c8cdd4e8f5f18adc306e3991af2982b5784c851		tag 'linux-4.4-gen-rkr1' of ssh://www.rockchip.com.cn/linux/linux/bsp/external/bluetooth_bsa
+12641d93030cda8c5ab52545473c71e14ec050a7		tag 'linux-4.19-gen-rkr1' of ssh://www.rockchip.com.cn/linux/linux/bsp/external/bluetooth_bsa
+73ce73c8329c29ccf0b3d55acf11c9481011ce4e		tag 'linux-4.19-gen-rkr2' of ssh://www.rockchip.com.cn/linux/linux/bsp/external/bluetooth_bsa
+017d32568ae696a24a51034649acc0dad6dfdc52		tag 'linux-4.19-gen-rkr3' of ssh://www.rockchip.com.cn/linux/linux/bsp/external/bluetooth_bsa
+b8e73b8a59f572cfd200d063a09fbe67f700c559		tag 'linux-5.10-gen-rkr1' of ssh://www.rockchip.com.cn/linux/linux/bsp/external/bluetooth_bsa

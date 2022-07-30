@@ -1,0 +1,37 @@
+[core]
+	repositoryformatversion = 0
+	filemode = true
+[filter "lfs"]
+	smudge = git-lfs smudge --skip -- %f
+	process = git-lfs filter-process --skip
+[remote "origin"]
+	url = ssh://git@www.rockchip.com.cn/linux/rockchip/platform/manifests
+	fetch = +refs/heads/*:refs/remotes/origin/*
+[branch "default"]
+	remote = origin
+	merge = refs/heads/linux
+[repo "syncstate.main"]
+	synctime = 2022-07-30T01:03:32.928760Z
+	version = 1
+[repo "syncstate.sys"]
+	argv = ['/home/pi/RK3399-linux/.repo/repo/main.py', '--repo-dir=/home/pi/RK3399-linux/.repo', '--wrapper-version=2.21', '--wrapper-path=/home/pi/RK3399-linux/.repo/repo/repo', '--', 'sync', '-c', '--no-tags']
+[repo "syncstate.options"]
+	jobs = 4
+	outermanifest = true
+	mpupdate = true
+	currentbranchonly = true
+	clonebundle = true
+	tags = false
+	retryfetches = 0
+	prune = true
+	repoverify = true
+	repoupgraded = true
+	quiet = false
+	verbose = false
+	localonly = true
+[repo "syncstate.remote.origin"]
+	url = ssh://git@www.rockchip.com.cn/linux/rockchip/platform/manifests
+	fetch = +refs/heads/*:refs/remotes/origin/*
+[repo "syncstate.branch.default"]
+	remote = origin
+	merge = refs/heads/linux

@@ -1,0 +1,8 @@
+0652a48c7e22b13c598a11255a5d28916c94a8b9		tag 'linux-4.4-gen-rkr1' of ssh://www.rockchip.com.cn/linux/linux/external/avb
+dc9687fff8966083e32c2e20c0ccda12aab81612		tag 'linux-4.19-gen-rkr1' of ssh://www.rockchip.com.cn/linux/linux/external/avb
+9cdda1157854005b4c6b32fa74d9905c4619fc79		tag 'linux-4.19-gen-rkr2' of ssh://www.rockchip.com.cn/linux/linux/external/avb
+97285c48f65c5d6a3a885b1d17874b2de3e3facb		tag 'linux-4.19-gen-rkr3' of ssh://www.rockchip.com.cn/linux/linux/external/avb
+eee9a3e6a371bec81ee8653e8329ed2c7fa53202		tag 'linux-5.10-gen-rkr1' of ssh://www.rockchip.com.cn/linux/linux/external/avb
+9de416da77fbebc4ce1db5b1aef2c1b4e881204d		tag 'linux-5.10-gen-rkr2' of ssh://www.rockchip.com.cn/linux/linux/external/avb
+8b55217ea2d33dc36bcd52c20ce037d9a8ef3f83		tag 'linux-5.10-gen-rkr3' of ssh://www.rockchip.com.cn/linux/linux/external/avb
+a064aff954ae87eb6aad53df4cf3ce7afbcdc160		tag 'linux-5.10-gen-rkr3.1' of ssh://www.rockchip.com.cn/linux/linux/external/avb

@@ -1,0 +1,4 @@
+4ec37a1b5d8a420c281912e9eb7d5774bc837e4d		tag 'linux-4.4-gen-rkr1' of ssh://www.rockchip.com.cn/linux/rk/prebuilts/gcc-buildroot-9.3.0-2020.03-x86_64_aarch64-rockchip-linux-gnu
+24a49d09bc1157edf035fbacf2508e9cddd40822		tag 'linux-4.19-gen-rkr1' of ssh://www.rockchip.com.cn/linux/rk/prebuilts/gcc-buildroot-9.3.0-2020.03-x86_64_aarch64-rockchip-linux-gnu
+6fcbe75167bf3509a7fba42a9ac6a1cc150b9845		tag 'linux-4.19-gen-rkr2' of ssh://www.rockchip.com.cn/linux/rk/prebuilts/gcc-buildroot-9.3.0-2020.03-x86_64_aarch64-rockchip-linux-gnu
+c9d199913efca57f98a1ac8b40e21518d9b0772b		tag 'linux-4.19-gen-rkr3' of ssh://www.rockchip.com.cn/linux/rk/prebuilts/gcc-buildroot-9.3.0-2020.03-x86_64_aarch64-rockchip-linux-gnu

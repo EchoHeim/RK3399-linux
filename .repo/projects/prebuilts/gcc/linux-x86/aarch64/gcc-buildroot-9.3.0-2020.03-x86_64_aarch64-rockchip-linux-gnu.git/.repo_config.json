@@ -1,0 +1,26 @@
+{
+  "core.repositoryformatversion": [
+    "0"
+  ],
+  "core.filemode": [
+    "true"
+  ],
+  "filter.lfs.smudge": [
+    "git-lfs smudge --skip -- %f"
+  ],
+  "filter.lfs.process": [
+    "git-lfs filter-process --skip"
+  ],
+  "remote.rk.url": [
+    "ssh://git@www.rockchip.com.cn/linux/rk/prebuilts/gcc-buildroot-9.3.0-2020.03-x86_64_aarch64-rockchip-linux-gnu"
+  ],
+  "remote.rk.projectname": [
+    "rk/prebuilts/gcc-buildroot-9.3.0-2020.03-x86_64_aarch64-rockchip-linux-gnu"
+  ],
+  "remote.rk.fetch": [
+    "+refs/heads/*:refs/remotes/rk/*"
+  ],
+  "gc.autodetach": [
+    "false"
+  ]
+}

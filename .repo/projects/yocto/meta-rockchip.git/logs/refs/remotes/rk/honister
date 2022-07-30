@@ -1,0 +1,2 @@
+0000000000000000000000000000000000000000 31406f7995e0a5027f07ea9cc25de94b973c86b2 Caesar Wang <wxt@rock-chips.com> 1656086959 +0800	fetch --progress --depth=1 rk --no-tags +refs/heads/honister:refs/remotes/rk/honister: storing head
+31406f7995e0a5027f07ea9cc25de94b973c86b2 558b10b34eb1ac509bcd26b0979020d03a84be9a Caesar Wang <wxt@rock-chips.com> 1656301379 +0800	fetch --progress --depth=1 rk --no-tags +refs/heads/honister:refs/remotes/rk/honister: forced-update

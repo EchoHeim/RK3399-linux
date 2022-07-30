@@ -1,0 +1,8 @@
+46754c89a8a8414e6c31e2ced89680d0fc7e2749		tag 'linux-4.4-gen-rkr1' of ssh://www.rockchip.com.cn/linux/linux/recovery
+0f66e5ac65a4ee81024503400ed7561638dc1860		tag 'linux-4.19-gen-rkr1' of ssh://www.rockchip.com.cn/linux/linux/recovery
+48b8ff95e9194c35a1678a382174b9120d28a16a		tag 'linux-4.19-gen-rkr2' of ssh://www.rockchip.com.cn/linux/linux/recovery
+0c3149aa83b8e20a947024a86dec444d252c6b81		tag 'linux-4.19-gen-rkr3' of ssh://www.rockchip.com.cn/linux/linux/recovery
+e4c0abca5f504de33b7cd6c5e56970ae0803febe		tag 'linux-5.10-gen-rkr1' of ssh://www.rockchip.com.cn/linux/linux/recovery
+1e25c9afeafeb2a1063c72a51eff41222be3c6e9		tag 'linux-5.10-gen-rkr2' of ssh://www.rockchip.com.cn/linux/linux/recovery
+875afd6a706f804a25bf5361e12359d42d488d96		tag 'linux-5.10-gen-rkr3' of ssh://www.rockchip.com.cn/linux/linux/recovery
+c7cbb900a9ccdab7c94adeb26953b967c4379ed4		tag 'linux-5.10-gen-rkr3.1' of ssh://www.rockchip.com.cn/linux/linux/recovery

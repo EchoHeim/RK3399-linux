@@ -1,0 +1,5 @@
+becf243cf51fc3f5beaf383376c7db2ccf12d147		tag 'linux-4.4-gen-rkr1' of ssh://www.rockchip.com.cn/linux/linux/bsp/external/broadcom_bsa
+a075600bbcbd2086d4ee93d351a9011f878341a7		tag 'linux-4.19-gen-rkr1' of ssh://www.rockchip.com.cn/linux/linux/bsp/external/broadcom_bsa
+c4f554359a942d4e6dc0bc2edfede2078da36e2f		tag 'linux-4.19-gen-rkr2' of ssh://www.rockchip.com.cn/linux/linux/bsp/external/broadcom_bsa
+9d29c6006da194e54d40676aab24f72a18b5b466		tag 'linux-4.19-gen-rkr3' of ssh://www.rockchip.com.cn/linux/linux/bsp/external/broadcom_bsa
+300ae27861dba6a29936ac2b1c837f9dac6ee04f		tag 'linux-5.10-gen-rkr1' of ssh://www.rockchip.com.cn/linux/linux/bsp/external/broadcom_bsa
