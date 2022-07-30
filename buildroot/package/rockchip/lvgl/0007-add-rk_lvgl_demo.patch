@@ -1,0 +1,2393 @@
+From b9870339c0a04779e01f09b2a0ddc285fd377813 Mon Sep 17 00:00:00 2001
+From: Jinkun Hong <jinkun.hong@rock-chips.com>
+Date: Tue, 7 Jun 2022 10:01:58 +0800
+Subject: [PATCH 7/7] add rk_lvgl_demo
+
+Signed-off-by: Jinkun Hong <jinkun.hong@rock-chips.com>
+---
+ rk_lvgl_demo/CMakeLists.txt           |   30 +
+ rk_lvgl_demo/main.c                   |   75 +++
+ rk_lvgl_demo/src/hal/drm_display.c    | 1141 +++++++++++++++++++++++++++++++++
+ rk_lvgl_demo/src/hal/drm_display.h    |   36 ++
+ rk_lvgl_demo/src/hal/evdev.c          |  257 ++++++++
+ rk_lvgl_demo/src/hal/evdev.h          |   83 +++
+ rk_lvgl_demo/src/hal/key.c            |  110 ++++
+ rk_lvgl_demo/src/hal/key.h            |   58 ++
+ rk_lvgl_demo/src/lvgl/lv_port_disp.c  |  287 +++++++++
+ rk_lvgl_demo/src/lvgl/lv_port_disp.h  |   21 +
+ rk_lvgl_demo/src/lvgl/lv_port_indev.c |  116 ++++
+ rk_lvgl_demo/src/lvgl/lv_port_indev.h |   27 +
+ rk_lvgl_demo/src/ui/demo.c            |   18 +
+ rk_lvgl_demo/src/ui/demo.h            |    7 +
+ 14 files changed, 2266 insertions(+)
+ create mode 100644 rk_lvgl_demo/CMakeLists.txt
+ create mode 100644 rk_lvgl_demo/main.c
+ create mode 100644 rk_lvgl_demo/src/hal/drm_display.c
+ create mode 100644 rk_lvgl_demo/src/hal/drm_display.h
+ create mode 100644 rk_lvgl_demo/src/hal/evdev.c
+ create mode 100644 rk_lvgl_demo/src/hal/evdev.h
+ create mode 100644 rk_lvgl_demo/src/hal/key.c
+ create mode 100644 rk_lvgl_demo/src/hal/key.h
+ create mode 100644 rk_lvgl_demo/src/lvgl/lv_port_disp.c
+ create mode 100644 rk_lvgl_demo/src/lvgl/lv_port_disp.h
+ create mode 100644 rk_lvgl_demo/src/lvgl/lv_port_indev.c
+ create mode 100644 rk_lvgl_demo/src/lvgl/lv_port_indev.h
+ create mode 100644 rk_lvgl_demo/src/ui/demo.c
+ create mode 100644 rk_lvgl_demo/src/ui/demo.h
+
+diff --git a/rk_lvgl_demo/CMakeLists.txt b/rk_lvgl_demo/CMakeLists.txt
+new file mode 100644
+index 0000000..ab4683d
+--- /dev/null
++++ b/rk_lvgl_demo/CMakeLists.txt
+@@ -0,0 +1,30 @@
++cmake_minimum_required(VERSION 3.8)
++
++project(rk_lvgl_demo)
++
++include(FindPkgConfig)
++
++list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
++
++include_directories(
++	${PROJECT_SOURCE_DIR}/./
++	${PROJECT_SOURCE_DIR}/src/
++	${CMAKE_SYSROOT}/usr/include/lvgl/
++	${CMAKE_SYSROOT}/usr/include/libdrm/
++	${CMAKE_SYSROOT}/usr/include/rockchip/
++	)
++
++link_directories(
++	${PROJECT_SOURCE_DIR}/./lib)
++
++aux_source_directory(./ SRCS)
++aux_source_directory(./src/hal/ SRCS)
++aux_source_directory(./src/lvgl SRCS)
++aux_source_directory(./src/ui SRCS)
++
++add_executable(${PROJECT_NAME} ${SRCS})
++
++target_link_libraries(${PROJECT_NAME}
++  drm lvgl rga pthread m lvgl_demos)
++
++install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION bin)
+diff --git a/rk_lvgl_demo/main.c b/rk_lvgl_demo/main.c
+new file mode 100644
+index 0000000..f46179b
+--- /dev/null
++++ b/rk_lvgl_demo/main.c
+@@ -0,0 +1,75 @@
++/*
++ * Copyright (c) 2021 Rockchip, Inc. All Rights Reserved.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++#include <errno.h>
++#include <fcntl.h>
++#include <pthread.h>
++#include <signal.h>
++#include <stdbool.h>
++#include <stdio.h>
++#include <string.h>
++#include <unistd.h>
++#include <sys/prctl.h>
++
++#include <linux/netlink.h>
++#include <linux/kd.h>
++#include <linux/input.h>
++#include <sys/socket.h>
++#include <sys/time.h>
++
++#include <rga/rga.h>
++#include <rga/RgaApi.h>
++
++#include "lvgl.h"
++
++#include "lvgl/lv_port_disp.h"
++#include "lvgl/lv_port_indev.h"
++#include "src/ui/demo.h"
++
++#define LVGL_TICK 	5
++
++static int g_ui_rotation = 0;
++static int quit = 0;
++
++static void sigterm_handler(int sig) {
++    fprintf(stderr, "signal %d\n", sig);
++    quit = 1;
++}
++
++static void lvgl_init(void)
++{
++    lv_init();
++    lv_port_disp_init(g_ui_rotation);
++    lv_port_indev_init(g_ui_rotation);
++}
++
++int main(int argc, char **argv)
++{
++    signal(SIGINT, sigterm_handler);
++    c_RkRgaInit();
++    lvgl_init();
++
++    demo_start();
++
++    while(!quit) {
++        lv_tick_inc(LVGL_TICK);
++        lv_task_handler();
++        usleep(LVGL_TICK * 1000);
++    }
++    c_RkRgaDeInit();
++
++    return 0;
++}
+diff --git a/rk_lvgl_demo/src/hal/drm_display.c b/rk_lvgl_demo/src/hal/drm_display.c
+new file mode 100644
+index 0000000..85dce61
+--- /dev/null
++++ b/rk_lvgl_demo/src/hal/drm_display.c
+@@ -0,0 +1,1141 @@
++#include <fcntl.h>
++#include <poll.h>
++#include <signal.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++#include <sys/ioctl.h>
++#include <sys/mman.h>
++
++#include <xf86drm.h>
++#include <xf86drmMode.h>
++#include <drm_fourcc.h>
++#include <drm_mode.h>
++
++#include <sys/time.h>
++
++#include "drm_display.h"
++
++#define NUM_DUMB_BO 3
++
++#define DEBUG
++#ifdef DEBUG
++#define DRM_DEBUG(fmt, ...) \
++    if (getenv("MJPG_DRM_DEBUG")) \
++        printf("DRM_DEBUG: %s(%d) " fmt, __func__, __LINE__, __VA_ARGS__)
++#else
++#define DRM_DEBUG(fmt, ...)
++#endif
++
++struct device {
++    int fd;
++
++    struct {
++        int width;
++        int height;
++
++        int hdisplay;
++        int vdisplay;
++
++        int current;
++        int fb_num;
++        int bpp;
++    } mode;
++
++    drmModeResPtr res;
++
++    int connector_id;
++    int encoder_id;
++    int crtc_id;
++    int plane_id;
++    int video_plane_id;
++    int last_fb_id;
++
++    struct drm_bo *dumb_bo[NUM_DUMB_BO];
++    struct drm_bo *video_bo[NUM_DUMB_BO];
++    int current_dumb;
++    int current_video;
++
++    int waiting_for_flip;
++    struct pollfd drm_pollfd;
++    drmEventContext drm_evctx;
++    int rot;
++
++    int drm_invalide;
++    int screen_state;
++};
++
++struct device *pdev;
++
++static int bo_map(struct device *dev, struct drm_bo *bo)
++{
++    struct drm_mode_map_dumb arg = {
++        .handle = bo->handle,
++    };
++    int ret;
++
++    ret = drmIoctl(dev->fd, DRM_IOCTL_MODE_MAP_DUMB, &arg);
++    if (ret)
++        return ret;
++
++    bo->ptr = mmap(0, bo->size, PROT_READ | PROT_WRITE, MAP_SHARED,
++                   dev->fd, arg.offset);
++    if (bo->ptr == MAP_FAILED) {
++        bo->ptr = NULL;
++        return -1;
++    }
++
++    return 0;
++}
++
++static void bo_unmap(struct device *dev, struct drm_bo *bo)
++{
++	  if (dev == NULL)
++	  	  return;
++    if (!bo->ptr)
++        return;
++
++    drmUnmap(bo->ptr, bo->size);
++    bo->ptr = NULL;
++}
++
++void bo_destroy(struct device *dev, struct drm_bo *bo)
++{
++    struct drm_mode_destroy_dumb arg = {
++        .handle = bo->handle,
++    };
++
++    if (bo->fb_id)
++        drmModeRmFB(dev->fd, bo->fb_id);
++
++    bo_unmap(dev, bo);
++
++    if (bo->handle)
++        drmIoctl(dev->fd, DRM_IOCTL_MODE_DESTROY_DUMB, &arg);
++
++    free(bo);
++}
++
++static struct drm_bo *
++bo_create(struct device *dev, int width, int height, int format)
++{
++    struct drm_mode_create_dumb arg = {
++        .bpp = 32,
++        .width = width,
++        .height = height,
++    };
++    struct drm_bo *bo;
++    uint32_t handles[4] = {0}, pitches[4] = {0}, offsets[4] = {0};
++    int ret;
++
++    bo = malloc(sizeof(struct drm_bo));
++    if (bo == NULL) {
++        fprintf(stderr, "allocate bo failed\n");
++        return NULL;
++    }
++    memset(bo, 0, sizeof(*bo));
++    if (format == DRM_FORMAT_NV12) {
++        arg.bpp = 8;
++        arg.height = height * 3 / 2;
++    }
++
++    ret = drmIoctl(dev->fd, DRM_IOCTL_MODE_CREATE_DUMB, &arg);
++    if (ret) {
++        fprintf(stderr, "create dumb failed\n");
++        goto err;
++    }
++
++    bo->fd = dev->fd;
++    bo->handle = arg.handle;
++    bo->size = arg.size;
++    bo->pitch = arg.pitch;
++
++    ret = bo_map(dev, bo);
++    if (ret) {
++        fprintf(stderr, "map bo failed\n");
++        goto err;
++    }
++
++    switch (format) {
++    case DRM_FORMAT_NV12:
++    case DRM_FORMAT_NV16:
++      handles[0] = bo->handle;
++      pitches[0] = bo->pitch ;
++      offsets[0] = 0;
++      handles[1] = bo->handle;
++      pitches[1] = pitches[0];
++      offsets[1] = pitches[0] * height;
++      break;
++    case DRM_FORMAT_RGB332:
++      handles[0] = bo->handle;
++      pitches[0] = bo->pitch;
++      offsets[0] = 0;
++      break;
++    case DRM_FORMAT_RGB565:
++    case DRM_FORMAT_BGR565:
++      handles[0] = bo->handle;
++      pitches[0] = bo->pitch ;
++      offsets[0] = 0;
++      break;
++    case DRM_FORMAT_RGB888:
++    case DRM_FORMAT_BGR888:
++      handles[0] = bo->handle;
++      pitches[0] = bo->pitch ;
++      offsets[0] = 0;
++      break;
++    case DRM_FORMAT_ARGB8888:
++    case DRM_FORMAT_ABGR8888:
++    case DRM_FORMAT_RGBA8888:
++    case DRM_FORMAT_BGRA8888:
++      handles[0] = bo->handle;
++      pitches[0] = bo->pitch ;
++      offsets[0] = 0;
++      break;
++    }
++
++    ret = drmModeAddFB2(dev->fd, width, height, format, handles,
++                        pitches, offsets, (uint32_t *)&bo->fb_id, 0);
++    if (ret) {
++        fprintf(stderr, "add fb failed\n");
++        goto err;
++    }
++    DRM_DEBUG("Created bo: %d, %dx%d\n", bo->fb_id, width, height);
++
++    return bo;
++err:
++    bo_destroy(dev, bo);
++    return NULL;
++}
++
++static void free_fb(struct device *dev)
++{
++    DRM_DEBUG("Free fb, num: %d, bpp: %d\n", dev->mode.fb_num, dev->mode.bpp);
++
++    dev->mode.fb_num = 0;
++    dev->mode.bpp = 0;
++    dev->mode.current = 0;
++}
++
++static int alloc_fb(struct device *dev, int num, int bpp)
++{
++    DRM_DEBUG("Alloc fb num: %d, bpp: %d\n", num, bpp);
++
++    dev->mode.fb_num = num;
++    dev->mode.bpp = bpp;
++    dev->mode.current = 0;
++
++    return 0;
++}
++
++static int drm_get_preferred_connector(void)
++{
++    const char *path;
++    char buf[256] = "\0";
++    int fd;
++
++#define DRM_CONNECTOR_CFG_PATH_ENV	"DRM_CONNECTOR_CFG_PATH"
++#define DRM_CONNECTOR_CFG_PATH_DEFAULT	"/tmp/drm_connector.cfg"
++    path = getenv(DRM_CONNECTOR_CFG_PATH_ENV);
++    if (!path)
++        path = DRM_CONNECTOR_CFG_PATH_DEFAULT;
++
++    fd = open(path, O_RDONLY);
++    read(fd, buf, sizeof(buf));
++    close(fd);
++
++    if (!buf[0])
++        return -1;
++
++    return atoi(buf);
++}
++
++static int drm_get_preferred_mode(int *width, int *height)
++{
++    const char *path;
++    char buf[256] = "\0";
++    int fd, w, h;
++
++#define DRM_MODE_CFG_PATH_ENV	"DRM_CONNECTOR_CFG_PATH"
++#define DRM_MODE_CFG_PATH_DEFAULT	"/tmp/drm_mode.cfg"
++    path = getenv(DRM_MODE_CFG_PATH_ENV);
++    if (!path)
++        path = DRM_MODE_CFG_PATH_DEFAULT;
++
++    fd = open(path, O_RDONLY);
++    read(fd, buf, sizeof(buf));
++    close(fd);
++
++    if (!buf[0])
++        return -1;
++
++    if (2 != sscanf(buf, "%dx%d", &w, &h))
++        return -1;
++
++    *width = w;
++    *height = h;
++
++    return 0;
++}
++
++static drmModeConnectorPtr
++drm_get_connector(struct device *dev, int connector_id)
++{
++    drmModeConnectorPtr conn;
++
++    conn = drmModeGetConnector(dev->fd, connector_id);
++    if (!conn)
++        return NULL;
++
++    DRM_DEBUG("Connector id: %d, %sconnected, modes: %d\n", connector_id,
++              (conn->connection == DRM_MODE_CONNECTED) ? "" : "dis",
++              conn->count_modes);
++    if (conn->connection == DRM_MODE_CONNECTED && conn->count_modes)
++        return conn;
++
++    drmModeFreeConnector(conn);
++    return NULL;
++}
++
++static drmModeConnectorPtr
++drm_find_best_connector(struct device *dev)
++{
++    drmModeResPtr res = dev->res;
++    drmModeConnectorPtr conn;
++    int i, preferred_connector_id = drm_get_preferred_connector();
++
++    DRM_DEBUG("Preferred connector id: %d\n", preferred_connector_id);
++    conn = drm_get_connector(dev, preferred_connector_id);
++    if (conn)
++        return conn;
++
++    for (i = 0; i < res->count_connectors; i++) {
++        conn = drm_get_connector(dev, res->connectors[i]);
++        if (conn)
++            return conn;
++    }
++    return NULL;
++}
++
++static drmModeCrtcPtr
++drm_find_best_crtc(struct device *dev, drmModeConnectorPtr conn)
++{
++    drmModeResPtr res = dev->res;
++    drmModeEncoderPtr encoder;
++    drmModeCrtcPtr crtc;
++    int i, preferred_crtc_id = 0;
++    int crtcs_for_connector = 0;
++
++    encoder = drmModeGetEncoder(dev->fd, conn->encoder_id);
++    if (encoder) {
++        preferred_crtc_id = encoder->crtc_id;
++        drmModeFreeEncoder(encoder);
++    }
++    DRM_DEBUG("Preferred crtc: %d\n", preferred_crtc_id);
++
++    crtc = drmModeGetCrtc(dev->fd, preferred_crtc_id);
++    if (crtc)
++        return crtc;
++
++    for (i = 0; i < res->count_encoders; i++) {
++        encoder = drmModeGetEncoder(dev->fd, res->encoders[i]);
++        if (encoder)
++            crtcs_for_connector |= encoder->possible_crtcs;
++        drmModeFreeEncoder(encoder);
++    }
++    DRM_DEBUG("Possible crtcs: %x\n", crtcs_for_connector);
++    if (!crtcs_for_connector)
++        return NULL;
++
++    return drmModeGetCrtc(dev->fd, res->crtcs[ffs(crtcs_for_connector) - 1]);
++}
++
++int
++drm_plane_is_primary(struct device *dev, int plane_id)
++{
++    drmModeObjectPropertiesPtr props;
++    drmModePropertyPtr prop;
++    unsigned int i;
++    int type = 0;
++
++    props = drmModeObjectGetProperties(dev->fd, plane_id,
++                                       DRM_MODE_OBJECT_PLANE);
++    if (!props)
++        return 0;
++
++    for (i = 0; i < props->count_props; i++) {
++        prop = drmModeGetProperty(dev->fd, props->props[i]);
++        if (prop && !strcmp(prop->name, "type"))
++            type = props->prop_values[i];
++        drmModeFreeProperty(prop);
++    }
++    DRM_DEBUG("Plane: %d, type: %d\n", plane_id, type);
++
++    drmModeFreeObjectProperties(props);
++    return type == DRM_PLANE_TYPE_PRIMARY;
++}
++
++int
++drm_plane_is_overlay(struct device *dev, int plane_id)
++{
++    drmModeObjectPropertiesPtr props;
++    drmModePropertyPtr prop;
++    unsigned int i;
++    int type = 0;
++
++    props = drmModeObjectGetProperties(dev->fd, plane_id,
++                                       DRM_MODE_OBJECT_PLANE);
++    if (!props)
++        return 0;
++
++    for (i = 0; i < props->count_props; i++) {
++        prop = drmModeGetProperty(dev->fd, props->props[i]);
++        if (prop && !strcmp(prop->name, "type"))
++            type = props->prop_values[i];
++        drmModeFreeProperty(prop);
++    }
++    DRM_DEBUG("Plane: %d, type: %d\n", plane_id, type);
++
++    drmModeFreeObjectProperties(props);
++    return type == DRM_PLANE_TYPE_OVERLAY;
++}
++
++static drmModePlanePtr
++drm_get_plane(struct device *dev, int plane_id, int pipe)
++{
++    drmModePlanePtr plane;
++
++    plane = drmModeGetPlane(dev->fd, plane_id);
++    if (!plane)
++        return NULL;
++
++    DRM_DEBUG("Check plane: %d, possible_crtcs: %x\n", plane_id,
++              plane->possible_crtcs);
++    if (drm_plane_is_overlay(dev, plane_id)) {
++        if (plane->possible_crtcs & (1 << pipe))
++            return plane;
++    }
++
++    drmModeFreePlane(plane);
++    return NULL;
++}
++
++static drmModePlanePtr
++drm_get_video_plane(struct device *dev, int plane_id, int pipe)
++{
++    drmModePlanePtr plane;
++
++    plane = drmModeGetPlane(dev->fd, plane_id);
++    if (!plane)
++        return NULL;
++
++    DRM_DEBUG("Check plane: %d, possible_crtcs: %x\n", plane_id,
++              plane->possible_crtcs);
++    if (drm_plane_is_primary(dev, plane_id)) {
++        if (plane->possible_crtcs & (1 << pipe))
++            return plane;
++    }
++
++    drmModeFreePlane(plane);
++    return NULL;
++}
++
++static drmModePlanePtr
++drm_find_best_plane(struct device *dev, drmModeCrtcPtr crtc)
++{
++    drmModeResPtr res = dev->res;
++    drmModePlaneResPtr pres;
++    drmModePlanePtr plane;
++    unsigned int i;
++    int pipe;
++
++    for (pipe = 0; pipe < res->count_crtcs; pipe++) {
++        if (crtc->crtc_id == res->crtcs[pipe])
++            break;
++    }
++    if (pipe == res->count_crtcs)
++        return NULL;
++
++    pres = drmModeGetPlaneResources(dev->fd);
++    if (!pres)
++        return NULL;
++
++    for (i = 0; i < pres->count_planes; i++) {
++        plane = drm_get_plane(dev, pres->planes[i], pipe);
++        if (plane) {
++            drmModeFreePlaneResources(pres);
++            return plane;
++        }
++        drmModeFreePlane(plane);
++    }
++
++    drmModeFreePlaneResources(pres);
++    return NULL;
++}
++
++static drmModePlanePtr
++drm_find_video_plane(struct device *dev, drmModeCrtcPtr crtc)
++{
++    drmModeResPtr res = dev->res;
++    drmModePlaneResPtr pres;
++    drmModePlanePtr plane;
++    unsigned int i;
++    int pipe;
++
++    for (pipe = 0; pipe < res->count_crtcs; pipe++) {
++        if (crtc->crtc_id == res->crtcs[pipe])
++            break;
++    }
++    if (pipe == res->count_crtcs)
++        return NULL;
++
++    pres = drmModeGetPlaneResources(dev->fd);
++    if (!pres)
++        return NULL;
++
++    for (i = 0; i < pres->count_planes; i++) {
++        plane = drm_get_video_plane(dev, pres->planes[i], pipe);
++        if (plane) {
++            drmModeFreePlaneResources(pres);
++            return plane;
++        }
++        drmModeFreePlane(plane);
++    }
++
++    drmModeFreePlaneResources(pres);
++    return NULL;
++}
++
++static drmModeModeInfoPtr
++drm_find_best_mode(struct device *dev, drmModeConnectorPtr conn)
++{
++    drmModeModeInfoPtr mode;
++    int i, preferred_width = 1920, preferred_height = 1080;
++
++    if (dev == NULL)
++    	  return 0;
++    drm_get_preferred_mode(&preferred_width, &preferred_height);
++    DRM_DEBUG("Preferred mode: %dx%d\n", preferred_width, preferred_height);
++
++    mode = &conn->modes[0];
++    for (i = 0; i < conn->count_modes; i++) {
++        DRM_DEBUG("Check mode: %dx%d\n",
++                conn->modes[i].hdisplay, conn->modes[i].vdisplay);
++        if (conn->modes[i].hdisplay == preferred_width &&
++                conn->modes[i].vdisplay == preferred_height) {
++            mode = &conn->modes[i];
++            break;
++        }
++    }
++
++    return mode;
++}
++
++static int drm_get_preferred_fb_mode(int *width, int *height)
++{
++    char *buf;
++    int w, h;
++
++    buf = getenv("MINIGUI_DRM_FB_MODE");
++    if (!buf)
++        return -1;
++
++    if (2 != sscanf(buf, "%dx%d", &w, &h))
++        return -1;
++
++    DRM_DEBUG("Preferred fb mode: %dx%d\n", w, h);
++    *width = w;
++    *height = h;
++
++    return 0;
++}
++
++static void drm_setup_fb_mode(struct device *dev)
++{
++    drmModeResPtr res = dev->res;
++    drmModeConnectorPtr conn;
++    drmModeModeInfoPtr mode;
++    int i;
++
++    if (dev->mode.width && dev->mode.height)
++        return;
++
++    if (!drm_get_preferred_fb_mode(&dev->mode.width, &dev->mode.height))
++        return;
++
++    dev->mode.width = dev->mode.hdisplay;
++    dev->mode.height = dev->mode.vdisplay;
++
++    for (i = 0; i < res->count_connectors; i++) {
++        conn = drm_get_connector(dev, res->connectors[i]);
++        if (!conn)
++            continue;
++
++        mode = drm_find_best_mode(dev, conn);
++        if (mode) {
++            DRM_DEBUG("Best mode for connector(%d): %dx%d\n",
++                      conn->connector_id, mode->hdisplay, mode->vdisplay);
++            if (dev->mode.width > mode->hdisplay ||
++                    dev->mode.height > mode->vdisplay) {
++                dev->mode.width = mode->hdisplay;
++                dev->mode.height = mode->vdisplay;
++            }
++        }
++        drmModeFreeConnector(conn);
++    }
++}
++
++static void drm_free(struct device *dev)
++{
++    int i;
++
++    for (i = 0; i < NUM_DUMB_BO; i++) {
++        if (dev->dumb_bo[i]) {
++            bo_destroy(dev, dev->dumb_bo[i]);
++            dev->dumb_bo[i] = NULL;
++        }
++        if (dev->video_bo[i]) {
++            bo_destroy(dev, dev->video_bo[i]);
++            dev->video_bo[i] = NULL;
++        }
++    }
++
++    if (dev->res) {
++        drmModeFreeResources(dev->res);
++        dev->res = NULL;
++    }
++
++    dev->connector_id = 0;
++    dev->crtc_id = 0;
++    dev->plane_id = 0;
++    dev->video_plane_id = 0;
++    dev->mode.hdisplay = 0;
++    dev->mode.vdisplay = 0;
++}
++
++static void configure_plane_zpos (struct device *self, int plane_id, uint64_t zpos)
++{
++    drmModeObjectPropertiesPtr props = NULL;
++    drmModePropertyPtr prop = NULL;
++    char *buf;
++    unsigned int i;
++
++    if (plane_id <= 0)
++        return;
++
++    if (drmSetClientCap (self->fd, DRM_CLIENT_CAP_ATOMIC, 1))
++        return;
++
++    props = drmModeObjectGetProperties (self->fd, plane_id,
++          DRM_MODE_OBJECT_PLANE);
++    if (!props)
++        goto out;
++
++    for (i = 0; i < props->count_props; i++) {
++        prop = drmModeGetProperty (self->fd, props->props[i]);
++        if (prop && !strcmp (prop->name, "ZPOS"))
++          break;
++        drmModeFreeProperty (prop);
++        prop = NULL;
++    }
++
++    if (!prop)
++        goto out;
++
++    drmModeObjectSetProperty (self->fd, plane_id,
++          DRM_MODE_OBJECT_PLANE, props->props[i], zpos);
++out:
++    drmModeFreeProperty (prop);
++    drmModeFreeObjectProperties (props);
++}
++
++static int drm_setup(struct device *dev)
++{
++    drmModeConnectorPtr conn = NULL;
++    drmModeModeInfoPtr mode;
++    drmModePlanePtr plane = NULL;
++    drmModePlanePtr video_plane = NULL;
++    drmModeCrtcPtr crtc = NULL;
++    //int ret;
++    int i, success = 0;
++
++    dev->res = drmModeGetResources(dev->fd);
++    if (!dev->res) {
++        fprintf(stderr, "drm get resource failed\n");
++        goto err;
++    }
++
++    conn = drm_find_best_connector(dev);
++    if (!conn) {
++        fprintf(stderr, "drm find connector failed\n");
++        goto err;
++    }
++    DRM_DEBUG("Best connector id: %d\n", conn->connector_id);
++
++    mode = drm_find_best_mode(dev, conn);
++    if (!mode) {
++        fprintf(stderr, "drm find mode failed\n");
++        goto err;
++    }
++    DRM_DEBUG("Best mode: %dx%d\n", mode->hdisplay, mode->vdisplay);
++
++    crtc = drm_find_best_crtc(dev, conn);
++    if (!crtc) {
++        fprintf(stderr, "drm find crtc failed\n");
++        goto err;
++    }
++    DRM_DEBUG("Best crtc: %d\n", crtc->crtc_id);
++
++    plane = drm_find_best_plane(dev, crtc);
++    if (!plane) {
++        fprintf(stderr, "drm find plane failed\n");
++        goto err;
++    }
++    configure_plane_zpos(dev, plane->plane_id, 1);
++    DRM_DEBUG("Best plane: %d\n", plane->plane_id);
++
++    video_plane = drm_find_video_plane(dev, crtc);
++    if (!video_plane) {
++        fprintf(stderr, "drm find video plane failed\n");
++        goto err;
++    }
++    configure_plane_zpos(dev, video_plane->plane_id, 0);
++    DRM_DEBUG("video plane: %d\n", video_plane->plane_id);
++
++    for (i = 0; i < NUM_DUMB_BO; i++) {
++        dev->dumb_bo[i] = bo_create(dev, mode->hdisplay, mode->vdisplay, DRM_FORMAT_ARGB8888);
++        if (!dev->dumb_bo[i]) {
++            fprintf(stderr, "create dumb bo %d failed\n", i);
++            goto err;
++        }
++        DRM_DEBUG("Created dumb bo fb: %d\n", dev->dumb_bo[i]->fb_id);
++    }
++    for (i = 0; i < NUM_DUMB_BO; i++) {
++        dev->video_bo[i] = bo_create(dev, mode->hdisplay, mode->vdisplay, DRM_FORMAT_ARGB8888/*DRM_FORMAT_NV12*/);
++        if (!dev->video_bo[i]) {
++            fprintf(stderr, "create video bo %d failed\n", i);
++            goto err;
++        }
++        DRM_DEBUG("Created video bo fb: %d\n", dev->video_bo[i]->fb_id);
++    }
++
++    dev->current_dumb = 0;
++    dev->current_video = 0;
++#if 0
++    ret = drmModeSetCrtc(dev->fd, crtc->crtc_id,
++                         dev->dumb_bo[dev->current_dumb]->fb_id, 0, 0,
++                         &conn->connector_id, 1, mode);
++    if (ret) {
++        fprintf(stderr, "drm set mode failed\n");
++        goto err;
++    }
++#endif
++    dev->connector_id = conn->connector_id;
++    dev->crtc_id = crtc->crtc_id;
++    dev->plane_id = plane->plane_id;
++    dev->video_plane_id = video_plane->plane_id;
++
++    dev->last_fb_id = 0;
++    dev->mode.hdisplay = mode->hdisplay;
++    dev->mode.vdisplay = mode->vdisplay;
++
++    drm_setup_fb_mode(dev);
++    DRM_DEBUG("Drm fb mode: %dx%d\n", dev->mode.width, dev->mode.height);
++
++    success = 1;
++err:
++    drmModeFreeConnector(conn);
++    drmModeFreePlane(plane);
++    drmModeFreePlane(video_plane);
++    drmModeFreeCrtc(crtc);
++    if (!success) {
++        drm_free(dev);
++        return -1;
++    }
++    return 0;
++}
++
++static void drm_flip_handler(int fd, unsigned frame, unsigned sec,
++                             unsigned usec, void *data)
++{
++    // data is &dev->waiting_for_flip
++    DRM_DEBUG("Page flip received(%d)!, %d, %d, %d, %d\n", *(int*)data, fd, frame, sec, usec);
++    *(int*)data = 0;
++}
++#if 0
++void drm_sighandler(int sig)
++{
++    if (!pdev)
++        return;
++
++    if (sig == SIGUSR2) {
++        DRM_DEBUG("Request reinit drm by sig: %d\n", sig);
++        pdev->drm_invalide = 1;
++    }
++}
++
++static void drm_install_sighandler(struct device* dev)
++{
++    struct sigaction sa;
++    if (dev == NULL)
++        return;
++    sa.sa_sigaction = NULL;
++    sa.sa_handler = drm_sighandler;
++    sa.sa_flags = SA_RESTART;
++    sigemptyset(&sa.sa_mask);
++    sigaction(SIGUSR2, &sa, NULL);
++}
++#endif
++
++int drm_init(int bpp, int rot)
++{
++    int ret;
++
++    pdev = malloc(sizeof(struct device));
++    if (pdev == NULL) {
++        fprintf(stderr, "allocate device failed\n");
++        return -1;
++    }
++    memset(pdev, 0, sizeof(*pdev));
++    pdev->screen_state = 1;
++
++    //drm_install_sighandler(pdev);
++
++    pdev->fd = drmOpen(NULL, NULL);
++    if (pdev->fd < 0)
++        pdev->fd = open("/dev/dri/card0", O_RDWR);
++    if (pdev->fd < 0) {
++        fprintf(stderr, "drm open failed\n");
++        goto err_drm_open;
++    }
++    fcntl(pdev->fd, F_SETFD, FD_CLOEXEC);
++
++    drmSetClientCap(pdev->fd, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1);
++
++    ret = alloc_fb(pdev, NUM_DUMB_BO, bpp);
++    if (ret) {
++        fprintf(stderr, "alloc fb failed\n");
++        goto err_alloc_fb;
++    }
++
++    ret = drm_setup(pdev);
++    if (ret) {
++        fprintf(stderr, "drm setup failed\n");
++        goto err_drm_setup;
++    }
++
++    pdev->drm_pollfd.fd = pdev->fd;
++    pdev->drm_pollfd.events = POLLIN;
++
++    pdev->drm_evctx.version = DRM_EVENT_CONTEXT_VERSION;
++    pdev->drm_evctx.page_flip_handler = drm_flip_handler;
++    pdev->rot = rot;
++
++    return 0;
++err_alloc_fb:
++    drm_free(pdev);
++err_drm_setup:
++    drmClose(pdev->fd);
++err_drm_open:
++    free(pdev);
++    pdev = NULL;
++    return -1;
++}
++
++int drm_deinit(void)
++{
++    struct device* dev = pdev;
++    if (!dev)
++        return 0;
++
++    free_fb(dev);
++    drm_free(dev);
++
++    if (pdev->fd > 0)
++        drmClose(dev->fd);
++
++    free(pdev);
++    pdev = NULL;
++
++    return 0;
++}
++
++int getdrmrot(void)
++{
++    return pdev->rot;
++}
++
++void getdrmdispbuff(char **buff)
++{
++    *buff = pdev->dumb_bo[pdev->current_dumb]->ptr;
++}
++
++int getdrmdispinfo(struct drm_bo *bo, int *w, int *h)
++{
++    if (pdev->dumb_bo[pdev->current_dumb]) {
++        memcpy(bo, pdev->dumb_bo[pdev->current_dumb], sizeof(struct drm_bo));
++        *w = pdev->mode.width;
++        *h = pdev->mode.height;
++    }
++
++    return 0;
++}
++
++struct drm_bo *getdrmdisp(void)
++{
++    if (pdev->screen_state)
++        pdev->current_dumb ++;
++    if (pdev->current_dumb >= NUM_DUMB_BO)
++        pdev->current_dumb = 0;
++    return pdev->dumb_bo[pdev->current_dumb];
++}
++
++static void drm_wait_flip(struct device* dev, int timeout)
++{
++    int ret;
++
++    while (dev->waiting_for_flip) {
++        dev->drm_pollfd.revents = 0;
++        ret = poll(&dev->drm_pollfd, 1, timeout);
++        if (ret <= 0)
++            return;
++
++        drmHandleEvent(dev->fd, &dev->drm_evctx);
++    }
++}
++
++void setdrmdisp(struct drm_bo *bo)
++{
++    struct device* dev = pdev;
++    int crtc_x, crtc_y, crtc_w, crtc_h;
++    int ret;
++    int fb = bo->fb_id, sw = dev->mode.width, sh = dev->mode.height;
++
++    if (dev == NULL)
++        return;
++    if (!dev->screen_state)
++        return;
++
++    crtc_w = dev->mode.width;
++    crtc_h = dev->mode.height;
++    crtc_x = 0;
++    crtc_y = 0;
++
++    DRM_DEBUG("Display bo %d(%dx%d) at (%d,%d) %dx%d\n", fb, sw, sh,
++             crtc_x, crtc_y, crtc_w, crtc_h);
++    ret = drmModeSetPlane(dev->fd, dev->plane_id, dev->crtc_id, fb, 0,
++                          crtc_x, crtc_y, crtc_w, crtc_h,
++                          0, 0, sw << 16, sh << 16);
++    if (ret) {
++        fprintf(stderr, "drm set plane failed\n");
++        return;
++    }
++    if (0) {
++        // Queue page flip
++        dev->waiting_for_flip = 1;
++        ret = drmModePageFlip(dev->fd, dev->crtc_id, fb,
++                              DRM_MODE_PAGE_FLIP_EVENT, &dev->waiting_for_flip);
++        if (ret) {
++            fprintf(stderr, "drm page flip failed\n");
++            return;
++        }
++        // Wait for last page flip
++        drm_wait_flip(dev, -1);
++    }
++}
++
++void getdrmvideodispbuff(char **buff)
++{
++    if (pdev->video_bo[pdev->current_video])
++        *buff = pdev->video_bo[pdev->current_video]->ptr;
++}
++
++int getdrmvideodispinfo(struct drm_bo *bo, int *w, int *h)
++{
++    if (pdev->video_bo[pdev->current_video]) {
++        memcpy(bo, pdev->video_bo[pdev->current_video], sizeof(struct drm_bo));
++        *w = pdev->mode.width;
++        *h = pdev->mode.height;
++    }
++
++    return 0;
++}
++
++struct drm_bo *getdrmvideodisp(void)
++{
++    if (pdev->screen_state)
++        pdev->current_video ++;
++    if (pdev->current_video >= NUM_DUMB_BO)
++        pdev->current_video = 0;
++    return pdev->video_bo[pdev->current_video];
++}
++
++void setdrmvideodisp(struct drm_bo *bo)
++{
++    struct device* dev = pdev;
++    int crtc_x, crtc_y, crtc_w, crtc_h;
++    int ret;
++    int fb = bo->fb_id, sw = dev->mode.width, sh = dev->mode.height;
++
++    if (dev == NULL)
++        return;
++    if (!dev->screen_state)
++        return;
++
++    crtc_w = dev->mode.width;
++    crtc_h = dev->mode.height;
++    crtc_x = 0;
++    crtc_y = 0;
++
++    DRM_DEBUG("Display bo %d(%dx%d) at (%d,%d) %dx%d\n", fb, sw, sh,
++             crtc_x, crtc_y, crtc_w, crtc_h);
++    ret = drmModeSetPlane(dev->fd, dev->video_plane_id, dev->crtc_id, fb, 0,
++                          crtc_x, crtc_y, crtc_w, crtc_h,
++                          0, 0, sw << 16, sh << 16);
++    if (ret) {
++        fprintf(stderr, "drm set plane failed\n");
++        return;
++    }
++}
++
++void drmvideodispblack(void)
++{
++    struct drm_bo *bo;
++    int w;
++    int sw;
++    int h;
++    int *buff;
++    int i, j;
++
++    getdrmresolve(&w, &h);
++    sw = getdrmvideowstride();
++    for (j = 0; j < NUM_DUMB_BO; j++) {
++        bo = getdrmvideodisp();
++        getdrmvideodispbuff(&buff);
++        for (i = 0; i < sw * h; i++) {
++            buff[i] = 0xff000000;
++        }
++        setdrmvideodisp(bo);
++    }
++}
++
++int drm_screen_off(void)
++{
++    struct device *dev = pdev;
++    struct drm_bo *bo;
++    int current_dumb;
++    int *buff;
++    int sw;
++    int w, h;
++    int ret;
++    int i;
++
++    if (dev == NULL)
++        return;
++    if (!dev->screen_state)
++        return -1;
++    dev->screen_state = 0;
++    current_dumb = pdev->current_dumb + 1;
++
++    if (current_dumb >= NUM_DUMB_BO)
++        current_dumb = 0;
++    bo = pdev->dumb_bo[current_dumb];
++    buff = bo->ptr;
++    getdrmresolve(&w, &h);
++    sw = getdrmvideowstride();
++    for (i = 0; i < sw * h; i++) {
++        buff[i] = 0xff000000;
++    }
++    ret = drmModeSetPlane(dev->fd, dev->plane_id, dev->crtc_id, bo->fb_id, 0,
++                          0, 0, dev->mode.width, dev->mode.height,
++                          0, 0, dev->mode.width << 16, dev->mode.height << 16);
++    if (ret) {
++        fprintf(stderr, "drm set plane failed\n");
++    }
++    return 0;
++}
++
++int drm_screen_on(void)
++{
++    struct device *dev = pdev;
++    struct drm_bo *bo;
++    int current_dumb;
++    int ret;
++    if (dev->screen_state)
++        return -1;
++    current_dumb = pdev->current_dumb;
++
++    bo = pdev->dumb_bo[current_dumb];
++
++    ret = drmModeSetPlane(dev->fd, dev->plane_id, dev->crtc_id, bo->fb_id, 0,
++                          0, 0, dev->mode.width, dev->mode.height,
++                          0, 0, dev->mode.width << 16, dev->mode.height << 16);
++    if (ret) {
++        fprintf(stderr, "drm set plane failed\n");
++    }
++    dev->screen_state = 1;
++
++    return 0;
++}
++
++int drm_invalide(void)
++{
++    return pdev && pdev->drm_invalide;
++}
++
++void getdrmdispbpp(int *bpp)
++{
++    *bpp = pdev->mode.bpp;
++}
++
++int getdrmwstride(void)
++{
++    return pdev->dumb_bo[pdev->current_dumb]->pitch / 4;
++}
++
++int getdrmvideowstride(void)
++{
++    return pdev->video_bo[pdev->current_video]->pitch / 4;
++}
++
++void getdrmresolve(int *w, int *h)
++{
++    *w = pdev->mode.width;
++    *h = pdev->mode.height;
++}
++
++#if 0
++int main(int argc, char **argv)
++{
++    int i;
++    int val = 0xff;
++    int w;
++    int h;
++    char *viraddr;
++
++    printf("drm_display run\n");
++    if (drm_init(32, 0) < 0)
++        return -1;
++
++    getdrmresolve(&w, &h);
++    struct drm_bo *bo = getdrmdisp();
++    getdrmdispbuff(&viraddr);
++    printf("%d, %d\n", w, h);
++    memset(viraddr, 0x00, w * h * 4);
++    setdrmdisp(bo);
++    while(1) {
++    	  if (val == 0xff) {
++    	      val = 0x80;
++    	  } else {
++    	  	  val = 0xff;
++    	  }
++    	  memset(viraddr, val, w * h * 4);
++        sleep(1);
++    }
++
++    drm_deinit();
++    printf("drm_display exit\n");
++
++    return 0;
++}
++#endif
+\ No newline at end of file
+diff --git a/rk_lvgl_demo/src/hal/drm_display.h b/rk_lvgl_demo/src/hal/drm_display.h
+new file mode 100644
+index 0000000..bccbced
+--- /dev/null
++++ b/rk_lvgl_demo/src/hal/drm_display.h
+@@ -0,0 +1,36 @@
++#ifndef __DRM_DISPLAY_H__
++#define __DRM_DISPLAY_H__
++
++struct drm_bo {
++    int fd;
++    void *ptr;
++    size_t size;
++    size_t offset;
++    size_t pitch;
++    unsigned int handle;
++    int fb_id;
++};
++
++int drm_init(int bpp, int rot);
++int drm_deinit(void);
++void getdrmdispbuff(char **buff);
++int getdrmdispinfo(struct drm_bo *bo, int *w, int *h);
++struct drm_bo *getdrmdisp(void);
++void setdrmdisp(struct drm_bo *bo);
++int drm_setmode(int num, int bpp);
++int drm_invalide(void);
++void getdrmdispbpp(int *bpp);
++void getdrmresolve(int *w, int *h);
++void getdrmvideodispbuff(char **buff);
++int getdrmvideodispinfo(struct drm_bo *bo, int *w, int *h);
++struct drm_bo *getdrmvideodisp(void);
++void setdrmvideodisp(struct drm_bo *bo);
++void drmvideodispblack(void);
++int getdrmwstride(void);
++int getdrmvideowstride(void);
++int getdrmrot(void);
++
++int drm_screen_off(void);
++int drm_screen_on(void);
++
++#endif
+diff --git a/rk_lvgl_demo/src/hal/evdev.c b/rk_lvgl_demo/src/hal/evdev.c
+new file mode 100644
+index 0000000..0c9c4f0
+--- /dev/null
++++ b/rk_lvgl_demo/src/hal/evdev.c
+@@ -0,0 +1,257 @@
++/**
++ * @file evdev.c
++ *
++ */
++
++/*********************
++ *      INCLUDES
++ *********************/
++#include "evdev.h"
++#if USE_EVDEV != 0 || USE_BSD_EVDEV
++
++#include <stdio.h>
++#include <unistd.h>
++#include <fcntl.h>
++#if USE_BSD_EVDEV
++#include <dev/evdev/input.h>
++#else
++#include <linux/input.h>
++#endif
++
++/*********************
++ *      DEFINES
++ *********************/
++
++/**********************
++ *      TYPEDEFS
++ **********************/
++
++/**********************
++ *  STATIC PROTOTYPES
++ **********************/
++int map(int x, int in_min, int in_max, int out_min, int out_max);
++
++/**********************
++ *  STATIC VARIABLES
++ **********************/
++int evdev_fd;
++int evdev_root_x;
++int evdev_root_y;
++int evdev_button;
++
++int evdev_key_val;
++
++int evdev_rot;
++/**********************
++ *      MACROS
++ **********************/
++
++/**********************
++ *   GLOBAL FUNCTIONS
++ **********************/
++
++/**
++ * Initialize the evdev interface
++ */
++void evdev_init(int rot)
++{
++    evdev_rot = rot;
++#if USE_BSD_EVDEV
++    evdev_fd = open(EVDEV_NAME, O_RDWR | O_NOCTTY);
++#else
++    evdev_fd = open(EVDEV_NAME, O_RDWR | O_NOCTTY | O_NDELAY);
++#endif
++    if(evdev_fd == -1) {
++        perror("unable open evdev interface:");
++        return;
++    }
++
++#if USE_BSD_EVDEV
++    fcntl(evdev_fd, F_SETFL, O_NONBLOCK);
++#else
++    fcntl(evdev_fd, F_SETFL, O_ASYNC | O_NONBLOCK);
++#endif
++
++    evdev_root_x = 0;
++    evdev_root_y = 0;
++    evdev_key_val = 0;
++    evdev_button = LV_INDEV_STATE_REL;
++}
++/**
++ * reconfigure the device file for evdev
++ * @param dev_name set the evdev device filename
++ * @return true: the device file set complete
++ *         false: the device file doesn't exist current system
++ */
++bool evdev_set_file(char* dev_name)
++{
++     if(evdev_fd != -1) {
++        close(evdev_fd);
++     }
++#if USE_BSD_EVDEV
++     evdev_fd = open(dev_name, O_RDWR | O_NOCTTY);
++#else
++     evdev_fd = open(dev_name, O_RDWR | O_NOCTTY | O_NDELAY);
++#endif
++
++     if(evdev_fd == -1) {
++        perror("unable open evdev interface:");
++        return false;
++     }
++
++#if USE_BSD_EVDEV
++     fcntl(evdev_fd, F_SETFL, O_NONBLOCK);
++#else
++     fcntl(evdev_fd, F_SETFL, O_ASYNC | O_NONBLOCK);
++#endif
++
++     evdev_root_x = 0;
++     evdev_root_y = 0;
++     evdev_key_val = 0;
++     evdev_button = LV_INDEV_STATE_REL;
++
++     return true;
++}
++/**
++ * Get the current position and state of the evdev
++ * @param data store the evdev data here
++ * @return false: because the points are not buffered, so no more data to be read
++ */
++void evdev_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
++{
++    struct input_event in;
++
++    while(read(evdev_fd, &in, sizeof(struct input_event)) > 0) {
++        if(in.type == EV_REL) {
++            if(in.code == REL_X)
++#if EVDEV_SWAP_AXES
++                evdev_root_y += in.value;
++#else
++                evdev_root_x += in.value;
++#endif
++            else if(in.code == REL_Y)
++#if EVDEV_SWAP_AXES
++                evdev_root_x += in.value;
++#else
++                evdev_root_y += in.value;
++#endif
++        } else if(in.type == EV_ABS) {
++            if(in.code == ABS_X)
++#if EVDEV_SWAP_AXES
++                evdev_root_y = in.value;
++#else
++                evdev_root_x = in.value;
++#endif
++            else if(in.code == ABS_Y)
++#if EVDEV_SWAP_AXES
++                evdev_root_x = in.value;
++#else
++                evdev_root_y = in.value;
++#endif
++            else if(in.code == ABS_MT_POSITION_X)
++#if EVDEV_SWAP_AXES
++                evdev_root_y = in.value;
++#else
++                evdev_root_x = in.value;
++#endif
++            else if(in.code == ABS_MT_POSITION_Y)
++#if EVDEV_SWAP_AXES
++                evdev_root_x = in.value;
++#else
++                evdev_root_y = in.value;
++#endif
++            else if(in.code == ABS_MT_TRACKING_ID)
++                if(in.value == -1)
++                    evdev_button = LV_INDEV_STATE_REL;
++                else if(in.value == 0)
++                    evdev_button = LV_INDEV_STATE_PR;
++        } else if(in.type == EV_KEY) {
++            if(in.code == BTN_MOUSE || in.code == BTN_TOUCH) {
++                if(in.value == 0)
++                    evdev_button = LV_INDEV_STATE_REL;
++                else if(in.value == 1)
++                    evdev_button = LV_INDEV_STATE_PR;
++            } else if(drv->type == LV_INDEV_TYPE_KEYPAD) {
++                data->state = (in.value) ? LV_INDEV_STATE_PR : LV_INDEV_STATE_REL;
++                switch(in.code) {
++                case KEY_BACKSPACE:
++                    data->key = LV_KEY_BACKSPACE;
++                    break;
++                case KEY_ENTER:
++                    data->key = LV_KEY_ENTER;
++                    break;
++                case KEY_UP:
++                    data->key = LV_KEY_UP;
++                    break;
++                case KEY_LEFT:
++                    data->key = LV_KEY_PREV;
++                    break;
++                case KEY_RIGHT:
++                    data->key = LV_KEY_NEXT;
++                    break;
++                case KEY_DOWN:
++                    data->key = LV_KEY_DOWN;
++                    break;
++                default:
++                    data->key = 0;
++                    break;
++                }
++                evdev_key_val = data->key;
++                evdev_button = data->state;
++                return ;
++            }
++        }
++    }
++
++    if(drv->type == LV_INDEV_TYPE_KEYPAD) {
++        /* No data retrieved */
++        data->key = evdev_key_val;
++        data->state = evdev_button;
++        return ;
++    }
++    if(drv->type != LV_INDEV_TYPE_POINTER)
++        return ;
++    /*Store the collected data*/
++
++#if EVDEV_CALIBRATE
++    data->point.x = map(evdev_root_x, EVDEV_HOR_MIN, EVDEV_HOR_MAX, 0, drv->disp->driver->hor_res);
++    data->point.y = map(evdev_root_y, EVDEV_VER_MIN, EVDEV_VER_MAX, 0, drv->disp->driver->ver_res);
++#else
++    data->point.x = evdev_root_x;
++    data->point.y = evdev_root_y;
++#endif
++
++    data->state = evdev_button;
++
++    if(data->point.x < 0)
++      data->point.x = 0;
++    if(data->point.y < 0)
++      data->point.y = 0;
++    if (evdev_rot == 90 || evdev_rot == 270) {
++        int tmp;
++        if(data->point.x >= drv->disp->driver->ver_res)
++          data->point.x = drv->disp->driver->ver_res - 1;
++        if(data->point.y >= drv->disp->driver->hor_res)
++          data->point.y = drv->disp->driver->hor_res - 1;
++        tmp = data->point.x;
++        data->point.x = data->point.y;
++        data->point.y = drv->disp->driver->ver_res - 1 - tmp;
++    } else {
++        if(data->point.x >= drv->disp->driver->hor_res)
++          data->point.x = drv->disp->driver->hor_res - 1;
++        if(data->point.y >= drv->disp->driver->ver_res)
++          data->point.y = drv->disp->driver->ver_res - 1;
++    }
++
++    return ;
++}
++
++/**********************
++ *   STATIC FUNCTIONS
++ **********************/
++int map(int x, int in_min, int in_max, int out_min, int out_max)
++{
++    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
++}
++
++#endif
+diff --git a/rk_lvgl_demo/src/hal/evdev.h b/rk_lvgl_demo/src/hal/evdev.h
+new file mode 100644
+index 0000000..95a0588
+--- /dev/null
++++ b/rk_lvgl_demo/src/hal/evdev.h
+@@ -0,0 +1,83 @@
++/**
++ * @file evdev.h
++ *
++ */
++
++#ifndef EVDEV_H
++#define EVDEV_H
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/*-------------------------------------------------
++ * Mouse or touchpad as evdev interface (for Linux based systems)
++ *------------------------------------------------*/
++#ifndef USE_EVDEV
++#  define USE_EVDEV           1
++#endif
++
++#ifndef USE_BSD_EVDEV
++#  define USE_BSD_EVDEV       0
++#endif
++
++#if USE_EVDEV || USE_BSD_EVDEV
++#  define EVDEV_NAME   "/dev/input/event0"        /*You can use the "evtest" Linux tool to get the list of devices and test them*/
++#  define EVDEV_SWAP_AXES         0               /*Swap the x and y axes of the touchscreen*/
++
++#  define EVDEV_CALIBRATE         0               /*Scale and offset the touchscreen coordinates by using maximum and minimum values for each axis*/
++
++#  if EVDEV_CALIBRATE
++#    define EVDEV_HOR_MIN         0               /*to invert axis swap EVDEV_XXX_MIN by EVDEV_XXX_MAX*/
++#    define EVDEV_HOR_MAX      4096               /*"evtest" Linux tool can help to get the correct calibraion values>*/
++#    define EVDEV_VER_MIN         0
++#    define EVDEV_VER_MAX      4096
++#  endif  /*EVDEV_CALIBRATE*/
++#endif  /*USE_EVDEV*/
++
++#if USE_EVDEV || USE_BSD_EVDEV
++
++#include "lvgl.h"
++
++/*********************
++ *      DEFINES
++ *********************/
++
++/**********************
++ *      TYPEDEFS
++ **********************/
++
++/**********************
++ * GLOBAL PROTOTYPES
++ **********************/
++
++/**
++ * Initialize the evdev
++ */
++void evdev_init(int rot);
++/**
++ * reconfigure the device file for evdev
++ * @param dev_name set the evdev device filename
++ * @return true: the device file set complete
++ *         false: the device file doesn't exist current system
++ */
++bool evdev_set_file(char* dev_name);
++/**
++ * Get the current position and state of the evdev
++ * @param data store the evdev data here
++ * @return false: because the points are not buffered, so no more data to be read
++ */
++void evdev_read(lv_indev_drv_t * drv, lv_indev_data_t * data);
++
++
++/**********************
++ *      MACROS
++ **********************/
++
++#endif /* USE_EVDEV */
++
++#ifdef __cplusplus
++} /* extern "C" */
++#endif
++
++#endif /* EVDEV_H */
+diff --git a/rk_lvgl_demo/src/hal/key.c b/rk_lvgl_demo/src/hal/key.c
+new file mode 100644
+index 0000000..036b510
+--- /dev/null
++++ b/rk_lvgl_demo/src/hal/key.c
+@@ -0,0 +1,110 @@
++/**
++ * @file evdev.c
++ *
++ */
++
++/*********************
++ *      INCLUDES
++ *********************/
++#include "key.h"
++#if USE_KEY != 0
++
++#include <stdio.h>
++#include <unistd.h>
++#include <fcntl.h>
++#include <linux/input.h>
++
++/*********************
++ *      DEFINES
++ *********************/
++
++/**********************
++ *      TYPEDEFS
++ **********************/
++
++/**********************
++ *  STATIC PROTOTYPES
++ **********************/
++
++/**********************
++ *  STATIC VARIABLES
++ **********************/
++static int key_fd;
++static int key_button;
++
++static int key_val;
++/**********************
++ *      MACROS
++ **********************/
++
++/**********************
++ *   GLOBAL FUNCTIONS
++ **********************/
++
++/**
++ * Initialize the evdev interface
++ */
++void key_init(void)
++{
++    key_fd = open(KEY_NAME, O_RDWR | O_NOCTTY | O_NDELAY);
++
++    if(key_fd == -1) {
++        perror("unable open evdev interface:");
++        return;
++    }
++
++    fcntl(key_fd, F_SETFL, O_ASYNC | O_NONBLOCK);
++
++    key_val = 0;
++    key_button = LV_INDEV_STATE_REL;
++}
++
++/**
++ * Get the current position and state of the evdev
++ * @param data store the evdev data here
++ * @return false: because the points are not buffered, so no more data to be read
++ */
++void key_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
++{
++    struct input_event in;
++
++    while(read(key_fd, &in, sizeof(struct input_event)) > 0) {
++        if(in.type == EV_KEY) {
++            data->state = (in.value) ? LV_INDEV_STATE_PR : LV_INDEV_STATE_REL;
++            switch(in.code) {
++            case 1:
++                data->key = LV_KEY_ESC;
++                break;
++            case 139:
++                data->key = LV_KEY_ENTER;
++                break;
++            //case KEY_UP:
++            //    data->key = LV_KEY_UP;
++            //    break;
++            case 105:
++                data->key = LV_KEY_PREV;
++                break;
++            case 106:
++                data->key = LV_KEY_NEXT;
++                break;
++            //case KEY_DOWN:
++            //    data->key = LV_KEY_DOWN;
++            //    break;
++            default:
++                data->key = 0;
++                break;
++            }
++            key_val = data->key;
++            key_button = data->state;
++            return ;
++        }
++    }
++
++    if(drv->type == LV_INDEV_TYPE_KEYPAD) {
++        /* No data retrieved */
++        data->key = key_val;
++        data->state = key_button;
++        return ;
++    }
++}
++#endif
+diff --git a/rk_lvgl_demo/src/hal/key.h b/rk_lvgl_demo/src/hal/key.h
+new file mode 100644
+index 0000000..dc3110b
+--- /dev/null
++++ b/rk_lvgl_demo/src/hal/key.h
+@@ -0,0 +1,58 @@
++/**
++ * @file key.h
++ *
++ */
++
++#ifndef KEY_H
++#define KEY_H
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/*-------------------------------------------------
++ * Mouse or touchpad as evdev interface (for Linux based systems)
++ *------------------------------------------------*/
++#define USE_KEY           0
++
++#if USE_KEY
++#  define KEY_NAME   "/dev/input/event2"
++
++#include "lvgl.h"
++
++/*********************
++ *      DEFINES
++ *********************/
++
++/**********************
++ *      TYPEDEFS
++ **********************/
++
++/**********************
++ * GLOBAL PROTOTYPES
++ **********************/
++
++/**
++ * Initialize the evdev
++ */
++void key_init(void);
++
++/**
++ * Get the current position and state of the evdev
++ * @param data store the evdev data here
++ * @return false: because the points are not buffered, so no more data to be read
++ */
++void key_read(lv_indev_drv_t * drv, lv_indev_data_t * data);
++
++
++/**********************
++ *      MACROS
++ **********************/
++
++#endif /* USE_KEY */
++
++#ifdef __cplusplus
++} /* extern "C" */
++#endif
++
++#endif /* KEY_H */
+diff --git a/rk_lvgl_demo/src/lvgl/lv_port_disp.c b/rk_lvgl_demo/src/lvgl/lv_port_disp.c
+new file mode 100644
+index 0000000..5f6ac8b
+--- /dev/null
++++ b/rk_lvgl_demo/src/lvgl/lv_port_disp.c
+@@ -0,0 +1,287 @@
++/**
++ * @file lv_port_disp_templ.c
++ *
++ */
++
++ /*Copy this file as "lv_port_disp.c" and set this value to "1" to enable content*/
++
++#include <pthread.h>
++#include <stdlib.h>
++#include <stdint.h>
++
++#include <rga/rga.h>
++#include <rga/RgaApi.h>
++
++#include "lv_port_disp.h"
++#include "lvgl.h"
++
++#include "hal/drm_display.h"
++
++static int rot_disp = 90;
++static int lcd_w;
++static int lcd_h;
++static int lcd_sw;
++static char* drm_buff;
++static lv_color_t *buf_1;
++
++//static struct timeval tvCbBegin;
++//static struct timeval tvCbEnd;
++static int quit = 0;
++static pthread_t disp_thread_pid;
++static pthread_mutex_t draw_mutex;
++static int draw_update = 0;
++
++static void disp_init(void);
++
++static void disp_flush(lv_disp_drv_t * disp_drv, const lv_area_t * area, lv_color_t * color_p);
++//static void gpu_fill(lv_disp_drv_t * disp_drv, lv_color_t * dest_buf, lv_coord_t dest_width,
++//        const lv_area_t * fill_area, lv_color_t color);
++
++static void *disp_thread(void *arg)
++{
++    while (!quit) {
++        pthread_mutex_lock(&draw_mutex);
++        if (draw_update) {
++            struct drm_bo *bo = getdrmdisp();
++            char *dst_buff = NULL;
++            getdrmdispbuff(&dst_buff);
++            draw_update = 0;
++            if (rot_disp == 90 || rot_disp == 270) {
++                rga_info_t src;
++                rga_info_t dst;
++                memset(&src, 0, sizeof(rga_info_t));
++                memset(&dst, 0, sizeof(rga_info_t));
++                src.virAddr = drm_buff;
++                //src.fd = RK_MPI_MB_GetFD(mb1);
++                src.fd = -1;
++                src.mmuFlag = 1;
++                //dst.fd = bo->fb_id;
++                dst.fd = -1;
++                dst.virAddr = dst_buff;
++                dst.mmuFlag = 1;
++                //printf("%d, %d, %d, %d\n", stImageInfo.u32Width, stImageInfo.u32Height, stImageInfo.u32HorStride, stImageInfo.u32VerStride);
++                rga_set_rect(&src.rect, 0, 0, lcd_h, lcd_w, lcd_h, lcd_w, RK_FORMAT_BGRA_8888);
++                src.rotation = HAL_TRANSFORM_ROT_90;
++                //src.blend = 0xff0405;
++                rga_set_rect(&dst.rect, 0, 0, lcd_w, lcd_h, lcd_sw, lcd_h, RK_FORMAT_BGRA_8888);
++
++                int ret = c_RkRgaBlit(&src, &dst, NULL);
++                if (ret)
++                    printf("c_RkRgaBlit2 error : %s\n", strerror(errno));
++            } else {
++#if 0
++                memcpy(dst_buff, drm_buff, lcd_w * lcd_h * 4);
++#else
++                rga_info_t src;
++                rga_info_t dst;
++                memset(&src, 0, sizeof(rga_info_t));
++                memset(&dst, 0, sizeof(rga_info_t));
++                src.virAddr = drm_buff;
++                //src.fd = RK_MPI_MB_GetFD(mb1);
++                src.mmuFlag = 1;
++                //dst.fd = bo->fb_id;
++                dst.virAddr = dst_buff;
++                dst.mmuFlag = 1;
++                //printf("%d, %d, %d, %d\n", stImageInfo.u32Width, stImageInfo.u32Height, stImageInfo.u32HorStride, stImageInfo.u32VerStride);
++                rga_set_rect(&src.rect, 0, 0, lcd_w, lcd_h, lcd_w, lcd_h, RK_FORMAT_BGRA_8888);
++                //src.rotation = HAL_TRANSFORM_ROT_90;
++                //src.blend = 0xff0105;
++                rga_set_rect(&dst.rect, 0, 0, lcd_w, lcd_h, lcd_sw, lcd_h, RK_FORMAT_BGRA_8888);
++
++                int ret = c_RkRgaBlit(&src, &dst, NULL);
++                if (ret)
++                    printf("c_RkRgaBlit2 error : %s\n", strerror(errno));
++#endif
++            }
++            pthread_mutex_unlock(&draw_mutex);
++            setdrmdisp(bo);
++        } else {
++            pthread_mutex_unlock(&draw_mutex);
++        }
++        usleep(17000);
++    }
++    return NULL;
++}
++
++void lv_port_disp_init(int rot)
++{
++    rot_disp = rot;
++    /*-------------------------
++     * Initialize your display
++     * -----------------------*/
++    disp_init();
++
++    /*-----------------------------
++     * Create a buffer for drawing
++     *----------------------------*/
++
++    /**
++     * LVGL requires a buffer where it internally draws the widgets.
++     * Later this buffer will passed to your display driver's `flush_cb` to copy its content to your display.
++     * The buffer has to be greater than 1 display row
++     *
++     * There are 3 buffering configurations:
++     * 1. Create ONE buffer:
++     *      LVGL will draw the display's content here and writes it to your display
++     *
++     * 2. Create TWO buffer:
++     *      LVGL will draw the display's content to a buffer and writes it your display.
++     *      You should use DMA to write the buffer's content to the display.
++     *      It will enable LVGL to draw the next part of the screen to the other buffer while
++     *      the data is being sent form the first buffer. It makes rendering and flushing parallel.
++     *
++     * 3. Double buffering
++     *      Set 2 screens sized buffers and set disp_drv.full_refresh = 1.
++     *      This way LVGL will always provide the whole rendered screen in `flush_cb`
++     *      and you only need to change the frame buffer's address.
++     */
++
++    /* Example for 1) */
++    static lv_disp_draw_buf_t draw_buf_dsc_1;
++    buf_1 = malloc(lcd_w * lcd_h * 4);
++
++    lv_disp_draw_buf_init(&draw_buf_dsc_1, buf_1, NULL, lcd_w * lcd_h);   /*Initialize the display buffer*/
++
++    /*-----------------------------------
++     * Register the display in LVGL
++     *----------------------------------*/
++
++    static lv_disp_drv_t disp_drv;                         /*Descriptor of a display driver*/
++    lv_disp_drv_init(&disp_drv);                    /*Basic initialization*/
++
++    /*Set up the functions to access to your display*/
++
++    /*Set the resolution of the display*/
++    if (rot_disp == 0) {
++        disp_drv.hor_res = lcd_w;
++        disp_drv.ver_res = lcd_h;
++
++        disp_drv.sw_rotate = 0;
++        disp_drv.rotated = LV_DISP_ROT_NONE;
++    } else if (rot_disp == 180) {
++        disp_drv.hor_res = lcd_w;
++        disp_drv.ver_res = lcd_h;
++
++        disp_drv.sw_rotate = 1;
++        disp_drv.rotated = LV_DISP_ROT_180;
++    } else if (rot_disp == 90) {
++        disp_drv.hor_res = lcd_h;
++        disp_drv.ver_res = lcd_w;
++
++        disp_drv.sw_rotate = 0;
++        disp_drv.rotated = LV_DISP_ROT_NONE;
++    } else if (rot_disp == 270) {
++        disp_drv.hor_res = lcd_h;
++        disp_drv.ver_res = lcd_w;
++
++        disp_drv.sw_rotate = 1;
++        disp_drv.rotated = LV_DISP_ROT_180;
++    }
++    /*Used to copy the buffer's content to the display*/
++    disp_drv.flush_cb = disp_flush;
++
++    /*Set a display buffer*/
++    disp_drv.draw_buf = &draw_buf_dsc_1;
++
++    /*Required for Example 3)*/
++    //disp_drv.full_refresh = 1
++
++    /* Fill a memory array with a color if you have GPU.
++     * Note that, in lv_conf.h you can enable GPUs that has built-in support in LVGL.
++     * But if you have a different GPU you can use with this callback.*/
++    //disp_drv.gpu_fill_cb = gpu_fill;
++
++    /*Finally register the driver*/
++    lv_disp_drv_register(&disp_drv);
++    pthread_mutex_init(&draw_mutex, NULL);
++    pthread_create(&disp_thread_pid, NULL, disp_thread, NULL);
++}
++
++/*Initialize your display and the required peripherals.*/
++static void disp_init(void)
++{
++    /*You code here*/
++    drm_init(32, rot_disp);
++    getdrmresolve(&lcd_w, &lcd_h);
++    lcd_sw = getdrmwstride();
++    drm_buff = malloc(lcd_w * lcd_h * 4);
++}
++
++/*Flush the content of the internal buffer the specific area on the display
++ *You can use DMA or any hardware acceleration to do this operation in the background but
++ *'lv_disp_flush_ready()' has to be called when finished.*/
++static void disp_flush(lv_disp_drv_t * disp_drv, const lv_area_t * area, lv_color_t * color_p)
++{
++    /*The most simple case (but also the slowest) to put all pixels to the screen one-by-one*/
++    int32_t x;
++    int32_t y;
++
++    //printf("%s, x1 = %d, y1 = %d, x2 = %d, y2 = %d, %d, %d\n\n\n", __func__, area->x1, area->y1, area->x2, area->y2, area->x2 - area->x1 + 1, area->y2 - area->y1 + 1);
++    //gettimeofday(&tvCbBegin, NULL);
++    pthread_mutex_lock(&draw_mutex);
++    if (rot_disp == 90 || rot_disp == 270) {
++        for(y = area->y1; y <= area->y2; y++) {
++            int area_w = area->x2 - area->x1 + 1;
++            lv_color_t *disp = (lv_color_t*)(drm_buff + (y * lcd_h + area->x1) * 4);
++            memcpy(disp, color_p, area_w * 4);
++            color_p += area_w;
++        }
++    } else {
++#if 1
++        for(y = area->y1; y <= area->y2; y++) {
++            int area_w = area->x2 - area->x1 + 1;
++            lv_color_t *disp = (lv_color_t*)(drm_buff + (y * lcd_w + area->x1) * 4);
++            memcpy(disp, color_p, area_w * 4);
++            color_p += area_w;
++        }
++#else
++        rga_info_t src;
++        rga_info_t dst;
++        int area_w = area->x2 - area->x1 + 1;
++        int area_h = area->y2 - area->y1 + 1;
++        memset(&src, 0, sizeof(rga_info_t));
++        memset(&dst, 0, sizeof(rga_info_t));
++        src.virAddr = color_p;
++        //src.fd = RK_MPI_MB_GetFD(mb1);
++        src.mmuFlag = 1;
++        //dst.fd = bo->fb_id;
++        dst.virAddr = drm_buff;
++        dst.mmuFlag = 1;
++        //printf("%d, %d, %d, %d\n", stImageInfo.u32Width, stImageInfo.u32Height, stImageInfo.u32HorStride, stImageInfo.u32VerStride);
++        rga_set_rect(&src.rect, 0, 0, area_w, area_h, area_w, area_h, RK_FORMAT_RGBA_8888);
++        //src.rotation = HAL_TRANSFORM_ROT_90;
++        //src.blend = 0xff0105;
++        rga_set_rect(&dst.rect, area->x1, area->y1, area_w, area_h, lcd_w, lcd_h, RK_FORMAT_RGBA_8888);
++
++        int ret = c_RkRgaBlit(&src, &dst, NULL);
++        if (ret)
++            printf("c_RkRgaBlit2 error : %s\n", strerror(errno));
++#endif
++    }
++    draw_update = 1;
++    pthread_mutex_unlock(&draw_mutex);
++    //gettimeofday(&tvCbEnd, NULL);
++    //double dDuration = 1000 * (tvCbEnd.tv_sec - tvCbBegin.tv_sec) + ((tvCbEnd.tv_usec - tvCbBegin.tv_usec) / 1000.0);
++    //printf("%s dDuration = %f\n", __func__, dDuration);
++    /*IMPORTANT!!!
++     *Inform the graphics library that you are ready with the flushing*/
++    lv_disp_flush_ready(disp_drv);
++}
++
++/*OPTIONAL: GPU INTERFACE*/
++
++/*If your MCU has hardware accelerator (GPU) then you can use it to fill a memory with a color*/
++//static void gpu_fill(lv_disp_drv_t * disp_drv, lv_color_t * dest_buf, lv_coord_t dest_width,
++//                    const lv_area_t * fill_area, lv_color_t color)
++//{
++//    /*It's an example code which should be done by your GPU*/
++//    int32_t x, y;
++//    dest_buf += dest_width * fill_area->y1; /*Go to the first line*/
++//
++//    for(y = fill_area->y1; y <= fill_area->y2; y++) {
++//        for(x = fill_area->x1; x <= fill_area->x2; x++) {
++//            dest_buf[x] = color;
++//        }
++//        dest_buf+=dest_width;    /*Go to the next line*/
++//    }
++//}
+\ No newline at end of file
+diff --git a/rk_lvgl_demo/src/lvgl/lv_port_disp.h b/rk_lvgl_demo/src/lvgl/lv_port_disp.h
+new file mode 100644
+index 0000000..2c9bfe8
+--- /dev/null
++++ b/rk_lvgl_demo/src/lvgl/lv_port_disp.h
+@@ -0,0 +1,21 @@
++/**
++ * @file lv_port_disp_templ.h
++ *
++ */
++
++ /*Copy this file as "lv_port_disp.h" and set this value to "1" to enable content*/
++
++#ifndef LV_PORT_DISP_TEMPL_H
++#define LV_PORT_DISP_TEMPL_H
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++void lv_port_disp_init(int rot);
++
++#ifdef __cplusplus
++} /*extern "C"*/
++#endif
++
++#endif /*LV_PORT_DISP_TEMPL_H*/
+diff --git a/rk_lvgl_demo/src/lvgl/lv_port_indev.c b/rk_lvgl_demo/src/lvgl/lv_port_indev.c
+new file mode 100644
+index 0000000..ea519fb
+--- /dev/null
++++ b/rk_lvgl_demo/src/lvgl/lv_port_indev.c
+@@ -0,0 +1,116 @@
++/**
++ * @file lv_port_indev_templ.c
++ *
++ */
++
++ /* Copy this file as "lv_port_indev.c" and set this value to "1" to enable conten */
++
++#include "lvgl.h"
++#include "lv_port_indev.h"
++
++#include "hal/evdev.h"
++#include "hal/key.h"
++
++typedef struct _GROUP_NODE {
++    struct _GROUP_NODE *next;
++    lv_group_t *group;
++} GROUP_NODE;
++
++static int rot_indev;
++lv_indev_t * indev_touchpad;
++lv_indev_t * indev_key;
++
++GROUP_NODE *group_list = NULL;
++
++lv_group_t *lv_port_indev_group_create(void)
++{
++    struct _GROUP_NODE *group_node = NULL;
++    lv_group_t *group = lv_group_create();
++
++    lv_indev_set_group(indev_key, group);
++    lv_group_set_default(group);
++
++    group_node = (struct _GROUP_NODE *)malloc(sizeof(struct _GROUP_NODE));
++    group_node->group = group;
++    group_node->next = NULL;
++    if (group_list) {
++        group_node->next = group_list;
++        group_list = group_node;
++    } else {
++        group_list = group_node;
++    }
++
++    return group;
++}
++
++void lv_port_indev_group_destroy(lv_group_t *group)
++{
++    if (group_list) {
++        struct _GROUP_NODE *group_node = NULL;
++        group_node = group_list;
++        if (group_list->group == group) {
++            group_list = group_list->next;
++            if (group_list) {
++                lv_indev_set_group(indev_key, group_list->group);
++                lv_group_set_default(group_list->group);
++            } else {
++                lv_indev_set_group(indev_key, NULL);
++                lv_group_set_default(NULL);
++            }
++            free(group_node);
++        } else {
++            while (group_node->next) {
++                struct _GROUP_NODE *group_node_next = group_node->next;
++                if (group_node_next->group == group) {
++                    group_node->next = group_node_next->next;
++                    free(group_node_next);
++                    break;
++                }
++                group_node = group_node->next;
++            }
++        }
++        lv_group_del(group);
++    }
++}
++
++void lv_port_indev_init(int rot)
++{
++    /**
++     * Here you will find example implementation of input devices supported by LittelvGL:
++     *  - Touchpad
++     *  - Mouse (with cursor support)
++     *  - Keypad (supports GUI usage only with key)
++     *  - Encoder (supports GUI usage only with: left, right, push)
++     *  - Button (external buttons to press points on the screen)
++     *
++     *  The `..._read()` function are only examples.
++     *  You should shape them according to your hardware
++     */
++
++    static lv_indev_drv_t indev_drv;
++    static lv_indev_drv_t key_drv;
++
++    rot_indev = rot;
++
++    /*------------------
++     * Touchpad
++     * -----------------*/
++
++    /*Initialize your touchpad if you have*/
++    evdev_init(rot);
++
++    /*Register a touchpad input device*/
++    lv_indev_drv_init(&indev_drv);
++    indev_drv.type = LV_INDEV_TYPE_POINTER;
++    indev_drv.read_cb = evdev_read;
++    indev_touchpad = lv_indev_drv_register(&indev_drv);
++
++#if USE_KEY
++    key_init();
++    lv_indev_drv_init(&key_drv);
++    key_drv.type = LV_INDEV_TYPE_KEYPAD;
++    key_drv.read_cb = key_read;
++    indev_key = lv_indev_drv_register(&key_drv);
++    lv_port_indev_group_create();
++#endif
++}
+diff --git a/rk_lvgl_demo/src/lvgl/lv_port_indev.h b/rk_lvgl_demo/src/lvgl/lv_port_indev.h
+new file mode 100644
+index 0000000..3d9c54b
+--- /dev/null
++++ b/rk_lvgl_demo/src/lvgl/lv_port_indev.h
+@@ -0,0 +1,27 @@
++
++/**
++ * @file lv_port_indev_templ.h
++ *
++ */
++
++ /*Copy this file as "lv_port_indev.h" and set this value to "1" to enable content*/
++#if 1
++
++#ifndef LV_PORT_INDEV_TEMPL_H
++#define LV_PORT_INDEV_TEMPL_H
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++void lv_port_indev_init(int rot);
++lv_group_t *lv_port_indev_group_create(void);
++void lv_port_indev_group_destroy(lv_group_t *group);
++
++#ifdef __cplusplus
++} /*extern "C"*/
++#endif
++
++#endif /*LV_PORT_INDEV_TEMPL_H*/
++
++#endif /*Disable/Enable content*/
+diff --git a/rk_lvgl_demo/src/ui/demo.c b/rk_lvgl_demo/src/ui/demo.c
+new file mode 100644
+index 0000000..174b08f
+--- /dev/null
++++ b/rk_lvgl_demo/src/ui/demo.c
+@@ -0,0 +1,18 @@
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++#include <time.h>
++
++#include "lvgl.h"
++#include "../../../demos/music/lv_demo_music.h"
++
++void demo_start(void)
++{
++    lv_demo_music();
++}
++
++void demo_stop(void)
++{
++
++}
+\ No newline at end of file
+diff --git a/rk_lvgl_demo/src/ui/demo.h b/rk_lvgl_demo/src/ui/demo.h
+new file mode 100644
+index 0000000..1ffa602
+--- /dev/null
++++ b/rk_lvgl_demo/src/ui/demo.h
+@@ -0,0 +1,7 @@
++#ifndef __DEMO_H__
++#define __DEMO_H__
++
++void demo_start(void);
++void demo_start(void);
++
++#endif
+-- 
+2.7.4
+

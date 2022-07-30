@@ -1,0 +1,27 @@
+From d857f9cfef804f55f50e9a5d467d2502e5e71ff2 Mon Sep 17 00:00:00 2001
+From: Jeffy Chen <jeffy.chen@rock-chips.com>
+Date: Fri, 10 Jun 2022 17:15:12 +0800
+Subject: [PATCH 7/8] Skip drawing when cwidth is zero
+
+Signed-off-by: Jeffy Chen <jeffy.chen@rock-chips.com>
+---
+ term.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/term.c b/term.c
+index 0aaf0ab..f6b24bd 100644
+--- a/term.c
++++ b/term.c
+@@ -100,6 +100,9 @@ static int term_draw_cell(struct tsm_screen* screen, uint64_t id,
+ 	if (age && terminal->term->age && age <= terminal->term->age)
+ 		return 0;
+ 
++	if (!cwidth)
++		return 0;
++
+ 	if (terminal->background_valid) {
+ 		br = (terminal->background >> 16) & 0xFF;
+ 		bg = (terminal->background >> 8) & 0xFF;
+-- 
+2.20.1
+

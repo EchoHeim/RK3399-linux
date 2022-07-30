@@ -1,0 +1,64 @@
+From 751607eb98b4e8ac5e9e291e7daa9af7636ecf6b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?V=C3=ADctor=20Manuel=20J=C3=A1quez=20Leal?=
+ <vjaquez@igalia.com>
+Date: Fri, 16 Apr 2021 18:10:38 +0200
+Subject: [PATCH 06/13] xvimagesink: Handle cropping when copying frames.
+
+Cropping was not handled properly when frames have to be copied to
+xvimage's buffer pool, first because the crop meta were dropped, and
+second because the allocated frame size in xvimage's buffer pool were
+smaller than the incoming frame.
+
+This patch updates xvimagesink's video info when propose_allocation()
+is called, and copies the GstVideoCropMeta from source frame to
+destination one.
+
+Part-of: <https://gitlab.freedesktop.org/gstreamer/gst-plugins-base/-/merge_requests/1088>
+(cherry picked from commit 87193af4d522952cd18225a4b6f2e9607c871776)
+Signed-off-by: Jeffy Chen <jeffy.chen@rock-chips.com>
+---
+ sys/xvimage/xvimagesink.c | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/sys/xvimage/xvimagesink.c b/sys/xvimage/xvimagesink.c
+index aded234fe..1dadd362e 100644
+--- a/sys/xvimage/xvimagesink.c
++++ b/sys/xvimage/xvimagesink.c
+@@ -948,6 +948,7 @@ gst_xv_image_sink_show_frame (GstVideoSink * vsink, GstBuffer * buf)
+   } else {
+     GstVideoFrame src, dest;
+     GstBufferPoolAcquireParams params = { 0, };
++    GstVideoCropMeta *crop_meta;
+ 
+     /* Else we have to copy the data into our private image, */
+     /* if we have one... */
+@@ -983,6 +984,15 @@ gst_xv_image_sink_show_frame (GstVideoSink * vsink, GstBuffer * buf)
+ 
+     gst_video_frame_unmap (&dest);
+     gst_video_frame_unmap (&src);
++
++    if ((crop_meta = gst_buffer_get_video_crop_meta (buf))) {
++      GstVideoCropMeta *dmeta = gst_buffer_add_video_crop_meta (to_put);
++
++      dmeta->x = crop_meta->x;
++      dmeta->y = crop_meta->y;
++      dmeta->width = crop_meta->width;
++      dmeta->height = crop_meta->height;
++    }
+   }
+ 
+   if (!gst_xv_image_sink_xvimage_put (xvimagesink, to_put))
+@@ -1087,6 +1097,10 @@ gst_xv_image_sink_propose_allocation (GstBaseSink * bsink, GstQuery * query)
+       goto no_pool;
+   }
+ 
++  /* update info since allocation frame's wxh might differ from the
++   * negotiation ones */
++  xvimagesink->info = info;
++
+   /* we need at least 2 buffer because we hold on to the last one */
+   gst_query_add_allocation_pool (query, pool, size, 2, 0);
+   if (pool)
+-- 
+2.20.1
+

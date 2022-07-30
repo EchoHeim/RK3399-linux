@@ -1,0 +1,13 @@
+diff --git a/include/mbedtls/config.h b/include/mbedtls/config.h
+index cd5c7ad..f1d140f 100644
+--- a/include/mbedtls/config.h
++++ b/include/mbedtls/config.h
+@@ -2193,7 +2193,7 @@
+  *
+  * This module provides debugging functions.
+  */
+-#define MBEDTLS_DEBUG_C
++// #define MBEDTLS_DEBUG_C
+ 
+ /**
+  * \def MBEDTLS_DES_C

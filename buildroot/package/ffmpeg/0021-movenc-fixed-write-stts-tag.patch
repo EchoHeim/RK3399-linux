@@ -1,0 +1,28 @@
+From bb77af934ecd07af267bd6fb49a216b39f4b7328 Mon Sep 17 00:00:00 2001
+From: ctf <ctf@rock-chips.com>
+Date: Fri, 5 Nov 2021 11:05:38 +0800
+Subject: [PATCH] movenc: fixed write stts tag
+
+Signed-off-by: ctf <ctf@rock-chips.com>
+---
+ libavformat/movenc.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/libavformat/movenc.c b/libavformat/movenc.c
+index 2a45302..d4cb02a 100644
+--- a/libavformat/movenc.c
++++ b/libavformat/movenc.c
+@@ -2291,6 +2291,10 @@ static int mov_write_stts_tag(AVIOContext *pb, MOVTrack *track)
+         }
+         for (i = 0; i < track->entry; i++) {
+             int duration = get_cluster_duration(track, i);
++
++            if (duration == 0)
++              continue;
++
+             if (i && duration == stts_entries[entries].duration) {
+                 stts_entries[entries].count++; /* compress */
+             } else {
+-- 
+2.7.4
+

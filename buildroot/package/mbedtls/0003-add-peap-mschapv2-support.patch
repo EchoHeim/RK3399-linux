@@ -1,0 +1,55 @@
+diff --git a/include/mbedtls/config.h b/include/mbedtls/config.h
+index d2e3878..cd5c7ad 100644
+--- a/include/mbedtls/config.h
++++ b/include/mbedtls/config.h
+@@ -2458,7 +2458,7 @@
+  *            it, and considering stronger message digests instead.
+  *
+  */
+-//#define MBEDTLS_MD4_C
++#define MBEDTLS_MD4_C
+ 
+ /**
+  * \def MBEDTLS_MD5_C
+diff --git a/include/mbedtls/ssl.h b/include/mbedtls/ssl.h
+index e8b973c..ad363c9 100644
+--- a/include/mbedtls/ssl.h
++++ b/include/mbedtls/ssl.h
+@@ -904,7 +904,6 @@ struct mbedtls_ssl_config
+     void *p_export_keys;            /*!< context for key export callback    */
+ #if defined(MBEDTLS_EAP_TLS_EXPORT_KEYS)
+     mbedtls_tls_key_t export_key_type;
+-    unsigned char eap_tls_keyblk[128];
+ #endif
+ #endif
+ 
+diff --git a/library/ssl_tls.c b/library/ssl_tls.c
+index 4525d6e..5fbee68 100644
+--- a/library/ssl_tls.c
++++ b/library/ssl_tls.c
+@@ -619,7 +619,7 @@ int mbedtls_ssl_derive_keys( mbedtls_ssl_context *ssl )
+     unsigned char tmp[64];
+     unsigned char keyblk[256];
+ #if defined(MBEDTLS_EAP_TLS_EXPORT_KEYS)
+-    unsigned char eap_tls_keyblk[128];
++    unsigned char eap_tls_keyblk[192];
+ #endif
+     unsigned char *key1;
+     unsigned char *key2;
+@@ -780,6 +780,7 @@ int mbedtls_ssl_derive_keys( mbedtls_ssl_context *ssl )
+             MBEDTLS_SSL_DEBUG_RET( 1, "eap_tls_prf", ret );
+             return( ret );
+         }
++        memcpy( eap_tls_keyblk + 128, handshake->randbytes, 64 );
+     }
+ #endif
+ 
+@@ -1047,7 +1048,7 @@ int mbedtls_ssl_derive_keys( mbedtls_ssl_context *ssl )
+         if ( ssl->conf->export_key_type == EAP_TLS_KEY )
+             ssl->conf->f_export_keys( ssl->conf->p_export_keys,
+                                   session->master, eap_tls_keyblk,
+-                                  0, 128, 0 );
++                                  0, 128, 64 );
+         else
+ #endif /* MBEDTLS_EAP_TLS_EXPORT_KEYS */
+         ssl->conf->f_export_keys( ssl->conf->p_export_keys,

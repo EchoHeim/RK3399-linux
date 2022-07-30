@@ -1,0 +1,96 @@
+From cb7904edd87190f9d372d7cb12e74c3b1dbbcb2e Mon Sep 17 00:00:00 2001
+From: Jeffy Chen <jeffy.chen@rock-chips.com>
+Date: Thu, 9 Jun 2022 16:15:07 +0800
+Subject: [PATCH 1/8] HACK: Fix compile errors
+
+Signed-off-by: Jeffy Chen <jeffy.chen@rock-chips.com>
+---
+ common.mk |  1 -
+ drm.c     |  2 +-
+ drm.h     | 28 +++++++++++++++++++++++++++-
+ fb.c      |  2 +-
+ 4 files changed, 29 insertions(+), 4 deletions(-)
+
+diff --git a/common.mk b/common.mk
+index 02757ae..7ac0fc2 100644
+--- a/common.mk
++++ b/common.mk
+@@ -314,7 +314,6 @@ COMMON_CFLAGS-clang := -fvisibility=hidden -ggdb
+ COMMON_CFLAGS := -Wall -Werror -fno-strict-aliasing $(SSP_CFLAGS) -O1 -Wformat=2
+ CXXFLAGS += $(COMMON_CFLAGS) $(COMMON_CFLAGS-$(CXXDRIVER))
+ CFLAGS += $(COMMON_CFLAGS) $(COMMON_CFLAGS-$(CDRIVER))
+-CPPFLAGS += -D_FORTIFY_SOURCE=2
+ 
+ # Enable large file support.
+ CPPFLAGS += -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE
+diff --git a/drm.c b/drm.c
+index e18ec9d..6d7b58b 100644
+--- a/drm.c
++++ b/drm.c
+@@ -821,7 +821,7 @@ static int remove_gamma_properties(drm_t* drm, uint32_t crtc_id) {
+ int32_t drm_setmode(drm_t* drm, uint32_t fb_id)
+ {
+ 	int conn;
+-	int32_t ret;
++	int32_t ret = 0;
+ 	uint32_t existing_console_crtc_id = 0;
+ 
+ 	if (drm->atomic)
+diff --git a/drm.h b/drm.h
+index f44cf4b..2f90da0 100644
+--- a/drm.h
++++ b/drm.h
+@@ -10,10 +10,36 @@
+ 
+ #include <stdbool.h>
+ #include <stdio.h>
+-#include <edid_utils.h>
+ #include <xf86drm.h>
+ #include <xf86drmMode.h>
+ 
++// Based on https://android.googlesource.com/platform/external/adhd:
++//   cras/src/common/edid_utils.h
++#define EDID_DTD_BASE 0x36
++#define EDID_N_DTDS 4
++
++#define EDID_SIZE 0x80
++
++#define DTD_PCLK_LO 0
++#define DTD_PCLK_HI 1
++#define DTD_HA_LO 2
++#define DTD_HBL_LO 3
++#define DTD_HABL_HI 4
++#define DTD_VA_LO 5
++#define DTD_VBL_LO 6
++#define DTD_VABL_HI 7
++#define DTD_HSO_LO 8
++#define DTD_HSW_LO 9
++#define DTD_VSX_LO 10
++#define DTD_HVSX_HI 11
++#define DTD_HSIZE_LO 12
++#define DTD_VSIZE_LO 13
++#define DTD_HVSIZE_HI 14
++#define DTD_HBORDER 15
++#define DTD_VBORDER 16
++#define DTD_FLAGS 17
++#define DTD_SIZE 18
++
+ typedef struct _drm_t {
+ 	int refcount;
+ 	int fd;
+diff --git a/fb.c b/fb.c
+index acd0aa7..aaf5fe0 100644
+--- a/fb.c
++++ b/fb.c
+@@ -161,7 +161,7 @@ static bool parse_edid_dtd_display_size(drm_t* drm, int32_t* hsize_mm, int32_t*
+ 
+ int fb_buffer_init(fb_t* fb)
+ {
+-	int32_t width, height, pitch;
++	int32_t width, height, pitch = 0;
+ 	int32_t hsize_mm, vsize_mm;
+ 	int r;
+ 
+-- 
+2.20.1
+

@@ -1,0 +1,53 @@
+From 8f8eaa27439e25bb03444bd24a5c08e5b6271824 Mon Sep 17 00:00:00 2001
+From: Jeffy Chen <jeffy.chen@rock-chips.com>
+Date: Sat, 9 May 2020 17:23:59 +0800
+Subject: [PATCH 09/15] qwaylandxdgshell: Support switching between fullscreen
+ and maximized
+
+1/ The weston expected a commit to apply new window states.
+2/ Switching between fullscreen and maximized requests unsetting the old
+state firstly.
+
+Signed-off-by: Jeffy Chen <jeffy.chen@rock-chips.com>
+---
+ .../shellintegration/xdg-shell/qwaylandxdgshell.cpp    | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/src/plugins/shellintegration/xdg-shell/qwaylandxdgshell.cpp b/src/plugins/shellintegration/xdg-shell/qwaylandxdgshell.cpp
+index 692e799..7034628 100644
+--- a/src/plugins/shellintegration/xdg-shell/qwaylandxdgshell.cpp
++++ b/src/plugins/shellintegration/xdg-shell/qwaylandxdgshell.cpp
+@@ -107,6 +107,9 @@ void QWaylandXdgSurface::Toplevel::applyConfigure()
+ 
+     m_xdgSurface->setSizeHints();
+ 
++    // Trigger a update to commit new state
++    m_xdgSurface->m_window->window()->requestUpdate();
++
+     m_applied = m_pending;
+     qCDebug(lcQpaWayland) << "Applied pending xdg_toplevel configure event:" << m_applied.size << m_applied.states;
+ }
+@@ -170,6 +173,11 @@ void QWaylandXdgSurface::Toplevel::requestWindowStates(Qt::WindowStates states)
+     // Re-send what's different from the applied state
+     Qt::WindowStates changedStates = m_applied.states ^ states;
+ 
++    if (changedStates & Qt::WindowFullScreen) {
++        if (!(states & Qt::WindowFullScreen))
++            unset_fullscreen();
++    }
++
+     if (changedStates & Qt::WindowMaximized) {
+         if (states & Qt::WindowMaximized)
+             set_maximized();
+@@ -180,8 +188,6 @@ void QWaylandXdgSurface::Toplevel::requestWindowStates(Qt::WindowStates states)
+     if (changedStates & Qt::WindowFullScreen) {
+         if (states & Qt::WindowFullScreen)
+             set_fullscreen(nullptr);
+-        else
+-            unset_fullscreen();
+     }
+ 
+     // Minimized state is not reported by the protocol, so always send it
+-- 
+2.20.1
+

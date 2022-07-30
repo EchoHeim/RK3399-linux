@@ -1,0 +1,261 @@
+diff --git a/configs/config-thread.h b/configs/config-thread.h
+index 25db16b..c2d8c88 100644
+--- a/configs/config-thread.h
++++ b/configs/config-thread.h
+@@ -21,6 +21,13 @@
+  *
+  *  This file is part of mbed TLS (https://tls.mbed.org)
+  */
++/*
++ * Portions of this file are copyright (c) 2019 - 2020
++ * Amazon.com, Inc. or its affiliates.  All rights reserved.
++ *
++ * PORTIONS OF THIS FILE ARE AMAZON PROPRIETARY/CONFIDENTIAL.  USE IS SUBJECT TO
++ * LICENSE TERMS.
++ */
+
+ /*
+  * Minimal configuration for using TLS a part of Thread
+@@ -51,6 +58,7 @@
+ #define MBEDTLS_SSL_DTLS_ANTI_REPLAY
+ #define MBEDTLS_SSL_DTLS_HELLO_VERIFY
+ #define MBEDTLS_SSL_EXPORT_KEYS
++#define MBEDTLS_EAP_TLS_EXPORT_KEYS
+
+ /* mbed TLS modules */
+ #define MBEDTLS_AES_C
+diff --git a/include/mbedtls/config.h b/include/mbedtls/config.h
+index 834cced..d2e3878 100644
+--- a/include/mbedtls/config.h
++++ b/include/mbedtls/config.h
+@@ -1620,6 +1620,16 @@
+ #define MBEDTLS_SSL_EXPORT_KEYS
+
+ /**
++ * \def MBEDTLS_EAP_TLS_EXPORT_KEYS
++ *
++ * Enable support for exporting EAP_TLS keys as defined in rfc5216.
++ * This is required for 802.1X support.
++ *
++ * Comment this macro to disable support for EAP_TLS key export
++ */
++#define MBEDTLS_EAP_TLS_EXPORT_KEYS
++
++/**
+  * \def MBEDTLS_SSL_SERVER_NAME_INDICATION
+  *
+  * Enable support for RFC 6066 server name indication (SNI) in SSL.
+diff --git a/include/mbedtls/ssl.h b/include/mbedtls/ssl.h
+index 1adf960..622a8b4 100644
+--- a/include/mbedtls/ssl.h
++++ b/include/mbedtls/ssl.h
+@@ -21,6 +21,13 @@
+  *
+  *  This file is part of mbed TLS (https://tls.mbed.org)
+  */
++/*
++ * Portions of this file are copyright (c) 2019 - 2020
++ * Amazon.com, Inc. or its affiliates.  All rights reserved.
++ *
++ * PORTIONS OF THIS FILE ARE AMAZON PROPRIETARY/CONFIDENTIAL.  USE IS SUBJECT TO
++ * LICENSE TERMS.
++ */
+ #ifndef MBEDTLS_SSL_H
+ #define MBEDTLS_SSL_H
+
+@@ -419,6 +426,18 @@ union mbedtls_ssl_premaster_secret
+ extern "C" {
+ #endif
+
++#if defined(MBEDTLS_EAP_TLS_EXPORT_KEYS)
++/*
++ * Exported key type
++ */
++typedef enum
++{
++    TLS_KEY,    /* rfc5246 - default*/
++    EAP_TLS_KEY /* rfc5216 */
++}
++mbedtls_tls_key_t;
++#endif
++
+ /*
+  * SSL state machine
+  */
+@@ -890,6 +909,10 @@ struct mbedtls_ssl_config
+     int (*f_export_keys)( void *, const unsigned char *,
+             const unsigned char *, size_t, size_t, size_t );
+     void *p_export_keys;            /*!< context for key export callback    */
++#if defined(MBEDTLS_EAP_TLS_EXPORT_KEYS)
++    mbedtls_tls_key_t export_key_type;
++    unsigned char eap_tls_keyblk[128];
++#endif
+ #endif
+
+ #if defined(MBEDTLS_X509_CRT_PARSE_C)
+@@ -1589,6 +1589,19 @@ void mbedtls_ssl_conf_session_tickets_cb( mbedtls_ssl_config *conf,
+ #endif /* MBEDTLS_SSL_SESSION_TICKETS && MBEDTLS_SSL_SRV_C */
+
+ #if defined(MBEDTLS_SSL_EXPORT_KEYS)
++#if defined(MBEDTLS_EAP_TLS_EXPORT_KEYS)
++/**
++ * \brief           Set type of the TLS key to export.
++ *                  (Default: TLS_KEY as defined in rfc4346
++ *
++ * \note            See \c mbedtls_tls_key_t.
++ *
++ * \param conf      SSL configuration context
++ * \param export_key_type   Type of the key to be exported
++ */
++void mbedtls_ssl_conf_export_keys_type( mbedtls_ssl_config *conf,
++        mbedtls_tls_key_t export_key_type);
++#endif /* MBEDTLS_EAP_TLS_EXPORT_KEYS */
+ /**
+  * \brief           Configure key export callback.
+  *                  (Default: none.)
+diff --git a/include/mbedtls/ssl_internal.h b/include/mbedtls/ssl_internal.h
+index bd5ad94..2db53a4 100644
+--- a/include/mbedtls/ssl_internal.h
++++ b/include/mbedtls/ssl_internal.h
+@@ -21,6 +21,13 @@
+  *
+  *  This file is part of mbed TLS (https://tls.mbed.org)
+  */
++/*
++ * Portions of this file are copyright (c) 2019 - 2020
++ * Amazon.com, Inc. or its affiliates.  All rights reserved.
++ *
++ * PORTIONS OF THIS FILE ARE AMAZON PROPRIETARY/CONFIDENTIAL.  USE IS SUBJECT TO
++ * LICENSE TERMS.
++ */
+ #ifndef MBEDTLS_SSL_INTERNAL_H
+ #define MBEDTLS_SSL_INTERNAL_H
+
+@@ -126,6 +133,15 @@
+ #define MBEDTLS_SSL_RETRANS_FINISHED        3
+
+ /*
++ * Move the definition from mbedtls/library/ssl_tls.c
++ *
++ * Note: Used by mbedtls_ssl_write_record function in
++ * mbedtls/library/ssl_tls.c
++ */
++#define SSL_DONT_FORCE_FLUSH 0
++#define SSL_FORCE_FLUSH      1
++
++/*
+  * Allow extra bytes for record, authentication and encryption overhead:
+  * counter (8) + header (5) + IV(16) + MAC (16-48) + padding (0-256)
+  * and allow for a maximum of 1024 of compression expansion if
+diff --git a/library/ssl_tls.c b/library/ssl_tls.c
+index b8f35fe..48185fb 100644
+--- a/library/ssl_tls.c
++++ b/library/ssl_tls.c
+@@ -19,6 +19,13 @@
+  *  This file is part of mbed TLS (https://tls.mbed.org)
+  */
+ /*
++ * Portions of this file are copyright (c) 2019 - 2020
++ * Amazon.com, Inc. or its affiliates.  All rights reserved.
++ *
++ * PORTIONS OF THIS FILE ARE AMAZON PROPRIETARY/CONFIDENTIAL.  USE IS SUBJECT TO
++ * LICENSE TERMS.
++ */
++/*
+  *  The SSL 3.0 specification was drafted by Netscape in 1996,
+  *  and became an IETF standard in 1999.
+  *
+@@ -104,9 +111,6 @@ static void ssl_update_out_pointers( mbedtls_ssl_context *ssl,
+ static void ssl_update_in_pointers( mbedtls_ssl_context *ssl,
+                                     mbedtls_ssl_transform *transform );
+
+-#define SSL_DONT_FORCE_FLUSH 0
+-#define SSL_FORCE_FLUSH      1
+-
+ #if defined(MBEDTLS_SSL_PROTO_DTLS)
+
+ /* Forward declarations for functions related to message buffering. */
+@@ -498,7 +502,16 @@ static int tls_prf_generic( mbedtls_md_type_t md_type,
+ {
+     size_t nb;
+     size_t i, j, k, md_len;
++#if defined(MBEDTLS_EAP_TLS_EXPORT_KEYS)
++    /*
++     * EAP-TLS is using label: "client EAP encryption" (RFC 5216)
++     * while TLS is using "master secret" (RFC4346 and RFC5246)
++     * If EAP-TLS is supported, increase buffer by 8 bytes
++     */
++    unsigned char tmp[128+8];
++#else
+     unsigned char tmp[128];
++#endif
+     unsigned char h_i[MBEDTLS_MD_MAX_SIZE];
+     const mbedtls_md_info_t *md_info;
+     mbedtls_md_context_t md_ctx;
+@@ -612,6 +625,9 @@ int mbedtls_ssl_derive_keys( mbedtls_ssl_context *ssl )
+     int ret = 0;
+     unsigned char tmp[64];
+     unsigned char keyblk[256];
++#if defined(MBEDTLS_EAP_TLS_EXPORT_KEYS)
++    unsigned char eap_tls_keyblk[128];
++#endif
+     unsigned char *key1;
+     unsigned char *key2;
+     unsigned char *mac_enc;
+@@ -762,6 +778,17 @@ int mbedtls_ssl_derive_keys( mbedtls_ssl_context *ssl )
+     }
+     else
+         MBEDTLS_SSL_DEBUG_MSG( 3, ( "no premaster (session resumed)" ) );
++#if defined(MBEDTLS_EAP_TLS_EXPORT_KEYS)
++    if ( ssl->conf->export_key_type == EAP_TLS_KEY ) {
++        ret = handshake->tls_prf( session->master, 48, "client EAP encryption",
++                              handshake->randbytes, 64, eap_tls_keyblk, 128 );
++        if( ret != 0 )
++        {
++            MBEDTLS_SSL_DEBUG_RET( 1, "eap_tls_prf", ret );
++            return( ret );
++        }
++    }
++#endif
+
+     /*
+      * Swap the client and server random values.
+@@ -1023,6 +1050,13 @@ int mbedtls_ssl_derive_keys( mbedtls_ssl_context *ssl )
+ #if defined(MBEDTLS_SSL_EXPORT_KEYS)
+     if( ssl->conf->f_export_keys != NULL )
+     {
++#if defined(MBEDTLS_EAP_TLS_EXPORT_KEYS)
++        if ( ssl->conf->export_key_type == EAP_TLS_KEY )
++            ssl->conf->f_export_keys( ssl->conf->p_export_keys,
++                                  session->master, eap_tls_keyblk,
++                                  0, 128, 0 );
++        else
++#endif /* MBEDTLS_EAP_TLS_EXPORT_KEYS */
+         ssl->conf->f_export_keys( ssl->conf->p_export_keys,
+                                   session->master, keyblk,
+                                   mac_key_len, transform->keylen,
+@@ -1079,6 +1113,10 @@ int mbedtls_ssl_derive_keys( mbedtls_ssl_context *ssl )
+     }
+ #endif /* MBEDTLS_CIPHER_MODE_CBC */
+
++#if defined(MBEDTLS_EAP_TLS_EXPORT_KEYS)
++    mbedtls_platform_zeroize( eap_tls_keyblk, sizeof(eap_tls_keyblk) );
++#endif
++
+     mbedtls_platform_zeroize( keyblk, sizeof( keyblk ) );
+
+ #if defined(MBEDTLS_ZLIB_SUPPORT)
+@@ -7719,6 +7757,13 @@ void mbedtls_ssl_conf_export_keys_cb( mbedtls_ssl_config *conf,
+     conf->f_export_keys = f_export_keys;
+     conf->p_export_keys = p_export_keys;
+ }
++#if defined(MBEDTLS_EAP_TLS_EXPORT_KEYS)
++void mbedtls_ssl_conf_export_keys_type( mbedtls_ssl_config *conf,
++        mbedtls_tls_key_t export_key_type )
++{
++    conf->export_key_type=export_key_type;
++}
++#endif /* MBEDTLS_EAP_TLS_EXPORT_KEYS */
+ #endif
+
+ #if defined(MBEDTLS_SSL_ASYNC_PRIVATE)

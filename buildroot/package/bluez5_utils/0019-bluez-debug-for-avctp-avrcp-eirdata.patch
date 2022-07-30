@@ -1,0 +1,78 @@
+From 7a9e2b31e4435ff21a86d723b474c6b99bc19ae1 Mon Sep 17 00:00:00 2001
+From: XiaoYao <xiaoyao@rock-chips.com>
+Date: Tue, 14 Sep 2021 17:12:08 +0800
+Subject: [PATCH 19/19] bluez: debug for avctp/avrcp/eirdata
+
+---
+ profiles/audio/avctp.c |  6 ++++++
+ profiles/audio/avrcp.c | 12 +++++++-----
+ src/device.c           |  6 +++---
+ 3 files changed, 16 insertions(+), 8 deletions(-)
+
+diff --git a/profiles/audio/avctp.c b/profiles/audio/avctp.c
+index 3d31d24..612a4c9 100644
+--- a/profiles/audio/avctp.c
++++ b/profiles/audio/avctp.c
+@@ -1394,6 +1394,12 @@ static void avctp_connect_cb(GIOChannel *chan, GError *err, gpointer data)
+ 	if (session->control == NULL)
+ 		session->control = avctp_channel_create(session, chan, 2, NULL);
+ 
++	if (session->control->io == NULL) {
++		error("avctp_connect_cb: closing unexpected connect");
++		g_io_channel_shutdown(chan, TRUE, NULL);
++		return;
++	}
++
+ 	session->control->imtu = imtu;
+ 	session->control->omtu = omtu;
+ 	session->control->buffer = g_malloc0(MAX(imtu, omtu));
+diff --git a/profiles/audio/avrcp.c b/profiles/audio/avrcp.c
+index 1242c47..6a52377 100644
+--- a/profiles/audio/avrcp.c
++++ b/profiles/audio/avrcp.c
+@@ -1514,15 +1514,17 @@ static bool handle_passthrough(struct avctp *conn, uint8_t op, bool pressed,
+ static bool handle_keycode(struct avctp *conn, uint8_t op, void *user_data)
+ {
+ 	struct avrcp *session = user_data;
+-	struct avrcp_player *player = session->controller->player;
+-	struct media_player *mp = player->user_data;
++	struct avrcp_player *player;
++	struct media_player *mp;
+ 
+-	if(!session || !player || !mp) {
+-		DBG("session or player or mp is null");
++	if (!session || !session->controller || !session->controller->player) {
++		DBG("session or controller or player is null");
+ 		return;
+ 	}
+ 
+-	media_player_set_key_code(mp, (uint32_t)op);
++	mp = player->user_data;
++	if (mp)
++		media_player_set_key_code(mp, (uint32_t)op);
+ }
+ 
+ static uint8_t avrcp_handle_register_notification(struct avrcp *session,
+diff --git a/src/device.c b/src/device.c
+index 61f3c41..4e4f68f 100644
+--- a/src/device.c
++++ b/src/device.c
+@@ -5628,12 +5628,12 @@ void device_set_eri_data(struct btd_device *device, const uint8_t *data, uint8_t
+ 	if(!data || data_len <= 0)
+ 		return;
+ 
+-	if(!strcmp(device->eir_data, data))
+-		return;
+-
+ 	len = data_len > GATT_EIR_DATA_LEN ? GATT_EIR_DATA_LEN : data_len;
+ 	memset(device->eir_data, 0, GATT_EIR_DATA_LEN);
+ 	memcpy(device->eir_data, data, len);
++
++	g_dbus_emit_property_changed(dbus_conn, device->path,
++					DEVICE_INTERFACE, "EirData");
+ }
+ 
+ bool device_is_connectable(struct btd_device *device)
+-- 
+2.20.1
+

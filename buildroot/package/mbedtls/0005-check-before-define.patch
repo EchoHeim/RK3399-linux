@@ -1,0 +1,15 @@
+diff --git a/library/entropy_poll.c b/library/entropy_poll.c
+index 4556f88..5248a25 100644
+--- a/library/entropy_poll.c
++++ b/library/entropy_poll.c
+@@ -21,8 +21,10 @@
+
+ #if defined(__linux__)
+ /* Ensure that syscall() is available even when compiling with -std=c99 */
++#if !defined(_GNU_SOURCE)
+ #define _GNU_SOURCE
+ #endif
++#endif
+
+ #if !defined(MBEDTLS_CONFIG_FILE)
+ #include "mbedtls/config.h"

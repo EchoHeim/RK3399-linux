@@ -1,0 +1,116 @@
+From 27f1c8f5fa1ed00025bc24d06ee94a4f14480cad Mon Sep 17 00:00:00 2001
+From: Fabrice Fontaine <fontaine.fabrice@gmail.com>
+Date: Sun, 12 Sep 2021 22:48:39 +0200
+Subject: [PATCH 03/19] media: Fix build with glibc >= 2.34
+
+pause() is defined in glibc since the very early times; it appears in
+upstream commit 28f540f45bba (initial import) in 1995 [0].
+
+Bluez has been defining a function named pause() for ages too, since
+commit caab74c97542 (media: Implement new callbacks for pass-through
+operations) in 2013 [1]
+
+With the recent bump to glibc 2.34.xxx, the build now fails because the
+two pause() clash:
+
+profiles/audio/media.c:1284:13: error: conflicting types for 'pause'
+ 1284 | static bool pause(void *user_data)
+      |             ^~~~~
+In file included from /tmp/instance-0/output-1/per-package/bluez5_utils/host/s390x-buildroot-linux-gnu/sysroot/usr/include/bits/sigstksz.h:24,
+                 from /tmp/instance-0/output-1/per-package/bluez5_utils/host/s390x-buildroot-linux-gnu/sysroot/usr/include/signal.h:328,
+                 from /tmp/instance-0/output-1/per-package/bluez5_utils/host/bin/../s390x-buildroot-linux-gnu/sysroot/usr/include/glib-2.0/glib/gbacktrace.h:36,
+                 from /tmp/instance-0/output-1/per-package/bluez5_utils/host/bin/../s390x-buildroot-linux-gnu/sysroot/usr/include/glib-2.0/glib.h:34,
+                 from profiles/audio/media.c:21:
+/tmp/instance-0/output-1/per-package/bluez5_utils/host/s390x-buildroot-linux-gnu/sysroot/usr/include/unistd.h:489:12: note: previous declaration of 'pause' was here
+  489 | extern int pause (void);
+      |            ^~~~~
+
+The culprit is indeed glibc 2.34, as can be seen in this result matrix:
+
+         \   bluez5_utils
+    glibc \  5.60  |  5.61
+    -------\-------+--------
+    2.33   |  OK   |   OK
+    -------+-------+--------
+    2.34   |  KO   |   KO
+
+The underlying reason that pause() is now causing issues with glibc 2.34
+is not obvious: glibc is a big beast, and finding such issues is not
+easy. However, we can see that the pause() provided by NPTL has been
+dropped in favour of the generic one, so maybe this is causing symbol
+visibility or weakness to change or something...
+
+We fix that by renaming the local pause() in bluez5_utils with a
+namespace-prefix, like some other functions there already have.
+
+Fixes:
+  - http://autobuild.buildroot.org/results/c4fbface34be8815838fd7201621d7a8fddd32c5
+  - http://autobuild.buildroot.org/results/62b88740f19fbe4a1ad7959dc141d539eb88c1f8
+
+[0] https://sourceware.org/git/?p=glibc.git;a=commit;h=28f540f45bbacd939bfd07f213bcad2bf730b1bf
+[1] https://github.com/bluez/bluez/commit/caab74c97542a56b591f0b16b44ab6ba4b40f0f5
+
+NOTE:
+Fix obexd/client/sync.c too.
+
+(cherry picked from commit 415af69b25d5ddcf007f167dc1689ef96a3566ca)
+Signed-off-by: Jeffy Chen <jeffy.chen@rock-chips.com>
+---
+ obexd/client/sync.c    | 6 +++---
+ profiles/audio/media.c | 4 ++--
+ 2 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/obexd/client/sync.c b/obexd/client/sync.c
+index 548c318..5fed6c4 100644
+--- a/obexd/client/sync.c
++++ b/obexd/client/sync.c
+@@ -222,7 +222,7 @@ static void sync_remove(struct obc_session *session)
+ 	g_dbus_unregister_interface(conn, path, SYNC_INTERFACE);
+ }
+ 
+-static struct obc_driver sync = {
++static struct obc_driver obc_driver_sync = {
+ 	.service = "SYNC",
+ 	.uuid = SYNC_UUID,
+ 	.target = OBEX_SYNC_UUID,
+@@ -241,7 +241,7 @@ int sync_init(void)
+ 	if (!conn)
+ 		return -EIO;
+ 
+-	err = obc_driver_register(&sync);
++	err = obc_driver_register(&obc_driver_sync);
+ 	if (err < 0) {
+ 		dbus_connection_unref(conn);
+ 		conn = NULL;
+@@ -258,5 +258,5 @@ void sync_exit(void)
+ 	dbus_connection_unref(conn);
+ 	conn = NULL;
+ 
+-	obc_driver_unregister(&sync);
++	obc_driver_unregister(&obc_driver_sync);
+ }
+diff --git a/profiles/audio/media.c b/profiles/audio/media.c
+index 23d1561..7cbfa7a 100644
+--- a/profiles/audio/media.c
++++ b/profiles/audio/media.c
+@@ -1238,7 +1238,7 @@ static bool stop(void *user_data)
+ 	return media_player_send(mp, "Stop");
+ }
+ 
+-static bool pause(void *user_data)
++static bool media_player_pause(void *user_data)
+ {
+ 	struct media_player *mp = user_data;
+ 
+@@ -1288,7 +1288,7 @@ static struct avrcp_player_cb player_cb = {
+ 	.set_volume = set_volume,
+ 	.play = play,
+ 	.stop = stop,
+-	.pause = pause,
++	.pause = media_player_pause,
+ 	.next = next,
+ 	.previous = previous,
+ };
+-- 
+2.20.1
+

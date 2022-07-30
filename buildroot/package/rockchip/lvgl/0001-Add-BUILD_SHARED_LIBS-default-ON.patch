@@ -1,0 +1,38 @@
+From 61efa736679ac6f8eb9d3264a4cd545df5f2984d Mon Sep 17 00:00:00 2001
+From: Jinkun Hong <jinkun.hong@rock-chips.com>
+Date: Mon, 6 Jun 2022 09:45:39 +0800
+Subject: [PATCH 1/6] Add BUILD_SHARED_LIBS default ON
+
+Signed-off-by: Jinkun Hong <jinkun.hong@rock-chips.com>
+---
+ env_support/cmake/custom.cmake | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/env_support/cmake/custom.cmake b/env_support/cmake/custom.cmake
+index cf6f843..494454e 100644
+--- a/env_support/cmake/custom.cmake
++++ b/env_support/cmake/custom.cmake
+@@ -11,11 +11,19 @@ option(LV_CONF_INCLUDE_SIMPLE
+ option(LV_CONF_PATH "Path defined for lv_conf.h")
+ get_filename_component(LV_CONF_DIR ${LV_CONF_PATH} DIRECTORY)
+ 
++# Option to build shared libraries (as opposed to static), default: ON
++option(BUILD_SHARED_LIBS "Build shared libraries" ON)
++
+ file(GLOB_RECURSE SOURCES ${LVGL_ROOT_DIR}/src/*.c)
+ file(GLOB_RECURSE EXAMPLE_SOURCES ${LVGL_ROOT_DIR}/examples/*.c)
+ file(GLOB_RECURSE DEMO_SOURCES ${LVGL_ROOT_DIR}/demos/*.c)
+ 
+-add_library(lvgl STATIC ${SOURCES})
++if (BUILD_SHARED_LIBS)
++  add_library(lvgl SHARED ${SOURCES})
++else()
++  add_library(lvgl STATIC ${SOURCES})
++endif()
++
+ add_library(lvgl::lvgl ALIAS lvgl)
+ add_library(lvgl_examples STATIC ${EXAMPLE_SOURCES})
+ add_library(lvgl::examples ALIAS lvgl_examples)
+-- 
+2.7.4
+

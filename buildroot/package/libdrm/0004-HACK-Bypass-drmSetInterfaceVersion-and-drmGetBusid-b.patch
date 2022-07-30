@@ -1,0 +1,42 @@
+From ebf67ee4b1c4973f73eca9d97deacd0050b9ba96 Mon Sep 17 00:00:00 2001
+From: Jeffy Chen <jeffy.chen@rock-chips.com>
+Date: Wed, 12 Jan 2022 11:42:19 +0800
+Subject: [PATCH 4/4] HACK: Bypass drmSetInterfaceVersion and drmGetBusid by
+ default
+
+A few versions of Mali GBM winsys would try to call those APIs.
+
+Set env "DRM_ALLOW_SET_VERSION" and "DRM_ALLOW_GET_BUSID" to enable it.
+
+Signed-off-by: Jeffy Chen <jeffy.chen@rock-chips.com>
+---
+ xf86drm.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/xf86drm.c b/xf86drm.c
+index d6afb70..0476cc5 100644
+--- a/xf86drm.c
++++ b/xf86drm.c
+@@ -1432,6 +1432,9 @@ drm_public char *drmGetBusid(int fd)
+ {
+     drm_unique_t u;
+ 
++    if (!getenv("DRM_ALLOW_GET_BUSID"))
++        return strdup("libdrm-fake-busid");
++
+     memclear(u);
+ 
+     if (drmIoctl(fd, DRM_IOCTL_GET_UNIQUE, &u))
+@@ -2988,6 +2991,9 @@ drm_public int drmSetInterfaceVersion(int fd, drmSetVersion *version)
+     int retcode = 0;
+     drm_set_version_t sv;
+ 
++    if (!getenv("DRM_ALLOW_SET_VERSION"))
++        return 0;
++
+     memclear(sv);
+     sv.drm_di_major = version->drm_di_major;
+     sv.drm_di_minor = version->drm_di_minor;
+-- 
+2.20.1
+

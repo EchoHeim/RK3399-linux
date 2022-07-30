@@ -1,0 +1,27 @@
+diff --git a/include/mbedtls/config.h b/include/mbedtls/config.h
+index 834cced..7ec55f9 100644
+--- a/include/mbedtls/config.h
++++ b/include/mbedtls/config.h
+@@ -25,6 +25,13 @@
+  *
+  *  This file is part of mbed TLS (https://tls.mbed.org)
+  */
++/*
++ * Portions of this file are copyright (c) 2019 - 2020
++ * Amazon.com, Inc. or its affiliates.  All rights reserved.
++ *
++ * PORTIONS OF THIS FILE ARE AMAZON PROPRIETARY/CONFIDENTIAL.  USE IS SUBJECT TO
++ * LICENSE TERMS.
++ */
+ 
+ #ifndef MBEDTLS_CONFIG_H
+ #define MBEDTLS_CONFIG_H
+@@ -2283,7 +2290,7 @@
+  *
+  * Requires: MBEDTLS_ECP_C, MBEDTLS_MD_C
+  */
+-//#define MBEDTLS_ECJPAKE_C
++#define MBEDTLS_ECJPAKE_C
+ 
+ /**
+  * \def MBEDTLS_ECP_C

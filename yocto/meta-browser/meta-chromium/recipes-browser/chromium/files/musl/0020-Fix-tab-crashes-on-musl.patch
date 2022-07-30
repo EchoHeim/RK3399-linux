@@ -1,0 +1,176 @@
+From b11616073264bba0d45f6a61eac17886f6aa0583 Mon Sep 17 00:00:00 2001
+From: Khem Raj <raj.khem@gmail.com>
+Date: Fri, 19 Mar 2021 20:16:00 -0700
+Subject: [PATCH 3/3] Fix tab crashes on musl
+
+Upstream-Status: Inappropriate [musl-specific]
+Signed-off-by: Khem Raj <raj.khem@gmail.com>
+---
+ .../syscall_parameters_restrictions.cc        | 22 +++++--------------
+ .../linux/seccomp-bpf-helpers/syscall_sets.cc |  5 +++--
+ .../system_headers/arm64_linux_syscalls.h     |  4 ++++
+ .../linux/system_headers/arm_linux_syscalls.h |  4 ++++
+ sandbox/linux/system_headers/linux_syscalls.h |  1 +
+ .../system_headers/mips64_linux_syscalls.h    |  4 ++++
+ .../system_headers/mips_linux_syscalls.h      |  4 ++++
+ .../system_headers/x86_64_linux_syscalls.h    |  4 ++++
+ .../policy/linux/bpf_renderer_policy_linux.cc |  4 ++--
+ 9 files changed, 32 insertions(+), 20 deletions(-)
+
+--- a/sandbox/linux/seccomp-bpf-helpers/syscall_parameters_restrictions.cc
++++ b/sandbox/linux/seccomp-bpf-helpers/syscall_parameters_restrictions.cc
+@@ -138,21 +138,11 @@ namespace sandbox {
+ // present (as in newer versions of posix_spawn).
+ ResultExpr RestrictCloneToThreadsAndEPERMFork() {
+   const Arg<unsigned long> flags(0);
+-
+-  // TODO(mdempsky): Extend DSL to support (flags & ~mask1) == mask2.
+-  const uint64_t kAndroidCloneMask = CLONE_VM | CLONE_FS | CLONE_FILES |
+-                                     CLONE_SIGHAND | CLONE_THREAD |
+-                                     CLONE_SYSVSEM;
+-  const uint64_t kObsoleteAndroidCloneMask = kAndroidCloneMask | CLONE_DETACHED;
+-
+-  const uint64_t kGlibcPthreadFlags =
+-      CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD |
+-      CLONE_SYSVSEM | CLONE_SETTLS | CLONE_PARENT_SETTID | CLONE_CHILD_CLEARTID;
+-  const BoolExpr glibc_test = flags == kGlibcPthreadFlags;
+-
+-  const BoolExpr android_test =
+-      AnyOf(flags == kAndroidCloneMask, flags == kObsoleteAndroidCloneMask,
+-            flags == kGlibcPthreadFlags);
++  const int required = CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND |
++                       CLONE_THREAD | CLONE_SYSVSEM;
++  const int safe = CLONE_SETTLS | CLONE_PARENT_SETTID | CLONE_CHILD_CLEARTID |
++                   CLONE_DETACHED;
++  const BoolExpr thread_clone_ok = (flags&~safe)==required;
+ 
+   // The following two flags are the two important flags in any vfork-emulating
+   // clone call. EPERM any clone call that contains both of them.
+@@ -162,7 +152,7 @@ ResultExpr RestrictCloneToThreadsAndEPER
+       AnyOf((flags & (CLONE_VM | CLONE_THREAD)) == 0,
+             (flags & kImportantCloneVforkFlags) == kImportantCloneVforkFlags);
+ 
+-  return If(IsAndroid() ? android_test : glibc_test, Allow())
++  return If(thread_clone_ok, Allow())
+       .ElseIf(is_fork_or_clone_vfork, Error(EPERM))
+       .Else(CrashSIGSYSClone());
+ }
+--- a/sandbox/linux/seccomp-bpf-helpers/syscall_sets.cc
++++ b/sandbox/linux/seccomp-bpf-helpers/syscall_sets.cc
+@@ -418,6 +418,7 @@ bool SyscallSets::IsAllowedProcessStartO
+ #if defined(__i386__)
+     case __NR_waitpid:
+ #endif
++    case __NR_set_tid_address:
+       return true;
+     case __NR_clone:  // Should be parameter-restricted.
+     case __NR_setns:  // Privileged.
+@@ -430,7 +431,6 @@ bool SyscallSets::IsAllowedProcessStartO
+ #if defined(__i386__) || defined(__x86_64__) || defined(__mips__)
+     case __NR_set_thread_area:
+ #endif
+-    case __NR_set_tid_address:
+     case __NR_unshare:
+ #if !defined(__mips__) && !defined(__aarch64__)
+     case __NR_vfork:
+@@ -544,6 +544,8 @@ bool SyscallSets::IsAllowedAddressSpaceA
+     case __NR_mlock:
+     case __NR_munlock:
+     case __NR_munmap:
++    case __NR_mremap:
++    case __NR_membarrier:
+       return true;
+     case __NR_madvise:
+     case __NR_mincore:
+@@ -561,7 +563,6 @@ bool SyscallSets::IsAllowedAddressSpaceA
+     case __NR_modify_ldt:
+ #endif
+     case __NR_mprotect:
+-    case __NR_mremap:
+     case __NR_msync:
+     case __NR_munlockall:
+     case __NR_readahead:
+--- a/sandbox/linux/system_headers/arm64_linux_syscalls.h
++++ b/sandbox/linux/system_headers/arm64_linux_syscalls.h
+@@ -1215,4 +1215,8 @@
+ #define __NR_landlock_restrict_self 446
+ #endif
+ 
++#if !defined(__NR_membarrier)
++#define __NR_membarrier 283
++#endif
++
+ #endif  // SANDBOX_LINUX_SYSTEM_HEADERS_ARM64_LINUX_SYSCALLS_H_
+--- a/sandbox/linux/system_headers/arm_linux_syscalls.h
++++ b/sandbox/linux/system_headers/arm_linux_syscalls.h
+@@ -1617,6 +1617,10 @@
+ #define __NR_landlock_restrict_self (__NR_SYSCALL_BASE + 446)
+ #endif
+ 
++#if !defined(__NR_membarrier)
++#define __NR_membarrier (__NR_SYSCALL_BASE+389)
++#endif
++
+ // ARM private syscalls.
+ #if !defined(__ARM_NR_BASE)
+ #define __ARM_NR_BASE (__NR_SYSCALL_BASE + 0xF0000)
+--- a/sandbox/linux/system_headers/linux_syscalls.h
++++ b/sandbox/linux/system_headers/linux_syscalls.h
+@@ -10,6 +10,7 @@
+ #define SANDBOX_LINUX_SYSTEM_HEADERS_LINUX_SYSCALLS_H_
+ 
+ #include "build/build_config.h"
++#include <sys/syscall.h>
+ 
+ #if defined(__x86_64__)
+ #include "sandbox/linux/system_headers/x86_64_linux_syscalls.h"
+--- a/sandbox/linux/system_headers/mips64_linux_syscalls.h
++++ b/sandbox/linux/system_headers/mips64_linux_syscalls.h
+@@ -1415,4 +1415,8 @@
+ #define __NR_landlock_restrict_self (__NR_Linux + 446)
+ #endif
+ 
++#if !defined(__NR_membarrier)
++#define __NR_membarrier (__NR_Linux  318)
++#endif
++
+ #endif  // SANDBOX_LINUX_SYSTEM_HEADERS_MIPS64_LINUX_SYSCALLS_H_
+--- a/sandbox/linux/system_headers/mips_linux_syscalls.h
++++ b/sandbox/linux/system_headers/mips_linux_syscalls.h
+@@ -1697,4 +1697,8 @@
+ #define __NR_landlock_restrict_self (__NR_Linux + 446)
+ #endif
+ 
++#if !defined(__NR_membarrier)
++#define __NR_membarrier (__NR_Linux  358)
++#endif
++
+ #endif  // SANDBOX_LINUX_SYSTEM_HEADERS_MIPS_LINUX_SYSCALLS_H_
+--- a/sandbox/linux/system_headers/x86_64_linux_syscalls.h
++++ b/sandbox/linux/system_headers/x86_64_linux_syscalls.h
+@@ -1438,5 +1438,9 @@
+ #define __NR_landlock_restrict_self 446
+ #endif
+ 
++#if !defined(__NR_membarrier)
++#define __NR_membarrier 324
++#endif
++
+ #endif  // SANDBOX_LINUX_SYSTEM_HEADERS_X86_64_LINUX_SYSCALLS_H_
+ 
+--- a/sandbox/policy/linux/bpf_renderer_policy_linux.cc
++++ b/sandbox/policy/linux/bpf_renderer_policy_linux.cc
+@@ -97,11 +97,11 @@ ResultExpr RendererProcessPolicy::Evalua
+     case __NR_sysinfo:
+     case __NR_times:
+     case __NR_uname:
+-      return Allow();
+-    case __NR_sched_getaffinity:
+     case __NR_sched_getparam:
+     case __NR_sched_getscheduler:
+     case __NR_sched_setscheduler:
++      return Allow();
++    case __NR_sched_getaffinity:
+       return RestrictSchedTarget(GetPolicyPid(), sysno);
+     case __NR_prlimit64:
+       // See crbug.com/662450 and setrlimit comment above.
