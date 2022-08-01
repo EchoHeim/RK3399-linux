@@ -1,2 +1,2 @@
 .BoardConfig.mk
-.target_product
+!.target_product
