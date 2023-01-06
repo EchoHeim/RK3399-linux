@@ -1,5 +1,6 @@
 # RK3399
 
+
 > linux-SDK: RK3399_LINUX_SDK_RELEASE_V2.5.1_20201203
 
 - 2022/07/30 `repo sync -c --no-tags`
